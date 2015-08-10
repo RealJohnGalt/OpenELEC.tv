@@ -70,12 +70,6 @@
     ./platform_init
   fi
 
-  # clear screen and hide cursor
-  clear
-  if [ -f /sys/devices/virtual/graphics/fbcon/cursor_blink ] ; then
-    echo 0 > /sys/devices/virtual/graphics/fbcon/cursor_blink
-  fi
-
   # parse command line arguments
   for arg in $(cat /proc/cmdline); do
     case $arg in
@@ -384,6 +378,12 @@
       insmod "$MODULE_DIR/$module.ko" || \
         progress "... Failed to load kernel module $module, skipping"
     done
+  }
+
+  init_console() {
+    # clear screen and hide cursor
+    clear
+    echo 0 > /sys/devices/virtual/graphics/fbcon/cursor_blink
   }
 
   load_splash() {
@@ -710,6 +710,7 @@
   # main boot sequence
   for BOOT_STEP in \
       load_modules \
+      init_console \
       check_disks \
       mount_flash \
       load_splash \
