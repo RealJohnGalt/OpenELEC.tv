@@ -122,8 +122,8 @@ configure_target() {
               --extra-libs="" \
               --extra-version="" \
               --build-suffix="" \
-              --disable-static \
-              --enable-shared \
+              --enable-static \
+              --disable-shared \
               --enable-gpl \
               --disable-version3 \
               --disable-nonfree \
@@ -219,5 +219,6 @@ configure_target() {
 }
 
 post_makeinstall_target() {
+  rm -rf $INSTALL/usr/bin/ffmpeg
   rm -rf $INSTALL/usr/share/ffmpeg/examples
 }
