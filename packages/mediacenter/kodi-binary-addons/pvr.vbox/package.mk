@@ -17,12 +17,12 @@
 ################################################################################
 
 PKG_NAME="pvr.vbox"
-PKG_VERSION="874eb88"
+PKG_VERSION="5273f25"
 PKG_REV="1"
 PKG_ARCH="any"
 PKG_LICENSE="GPL"
 PKG_SITE="http://www.kodi.tv"
-PKG_URL="$DISTRO_SRC/$PKG_NAME-$PKG_VERSION.tar.xz"
+PKG_URL="http://saraev.ca/openelec/$PKG_NAME-$PKG_VERSION.tar.xz"
 PKG_DEPENDS_TARGET="toolchain kodi-platform tinyxml2"
 PKG_PRIORITY="optional"
 PKG_SECTION=""

@@ -17,12 +17,12 @@
 ################################################################################
 
 PKG_NAME="pvr.filmon"
-PKG_VERSION="5c41f4e"
+PKG_VERSION="8c444dc"
 PKG_REV="1"
 PKG_ARCH="any"
 PKG_LICENSE="GPL"
 PKG_SITE="http://www.kodi.tv"
-PKG_URL="$DISTRO_SRC/$PKG_NAME-$PKG_VERSION.tar.xz"
+PKG_URL="http://saraev.ca/openelec/$PKG_NAME-$PKG_VERSION.tar.xz"
 PKG_DEPENDS_TARGET="toolchain kodi-platform jsoncpp"
 PKG_PRIORITY="optional"
 PKG_SECTION=""
