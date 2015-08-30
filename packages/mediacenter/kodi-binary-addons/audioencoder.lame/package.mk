@@ -17,12 +17,12 @@
 ################################################################################
 
 PKG_NAME="audioencoder.lame"
-PKG_VERSION="b283cd5"
+PKG_VERSION="606770e"
 PKG_REV="1"
 PKG_ARCH="any"
 PKG_LICENSE="GPL"
 PKG_SITE="http://www.kodi.tv"
-PKG_URL="$DISTRO_SRC/$PKG_NAME-$PKG_VERSION.tar.xz"
+PKG_URL="http://saraev.ca/openelec/$PKG_NAME-$PKG_VERSION.tar.xz"
 PKG_DEPENDS_TARGET="toolchain kodi-platform lame"
 PKG_PRIORITY="optional"
 PKG_SECTION=""
