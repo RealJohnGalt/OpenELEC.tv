@@ -1,0 +1,1479 @@
+From c4084f28be9231f23f32d3b2791fa519f7600299 Mon Sep 17 00:00:00 2001
+From: Thomas Amland <thomas.amland@gmail.com>
+Date: Fri, 21 Aug 2015 19:40:30 +0200
+Subject: [PATCH 1/4] [addons] move installing for updates to addon installer
+
+---
+ xbmc/addons/AddonInstaller.cpp        | 14 ++++++++++++++
+ xbmc/addons/AddonInstaller.h          |  2 ++
+ xbmc/addons/GUIWindowAddonBrowser.cpp |  8 +-------
+ 3 files changed, 17 insertions(+), 7 deletions(-)
+
+diff --git a/xbmc/addons/AddonInstaller.cpp b/xbmc/addons/AddonInstaller.cpp
+index d74a74a..b3ee214 100644
+--- a/xbmc/addons/AddonInstaller.cpp
++++ b/xbmc/addons/AddonInstaller.cpp
+@@ -503,6 +503,20 @@ void CAddonInstaller::PrunePackageCache()
+     delete it->second;
+ }
+ 
++void CAddonInstaller::InstallUpdates()
++{
++  VECADDONS addons;
++  if (CAddonMgr::GetInstance().GetAllOutdatedAddons(addons, true))
++  {
++    for (const auto& addon : addons)
++    {
++      std::string referer = StringUtils::Format("Referer=%s-%s.zip",
++          addon->ID().c_str(), addon->Version().asString().c_str());
++      CAddonInstaller::GetInstance().Install(addon->ID(), true, referer);
++    }
++  }
++}
++
+ int64_t CAddonInstaller::EnumeratePackageFolder(std::map<std::string,CFileItemList*>& result)
+ {
+   CFileItemList items;
+diff --git a/xbmc/addons/AddonInstaller.h b/xbmc/addons/AddonInstaller.h
+index b1c9744..70c545a 100644
+--- a/xbmc/addons/AddonInstaller.h
++++ b/xbmc/addons/AddonInstaller.h
+@@ -110,6 +110,8 @@ class CAddonInstaller : public IJobCallback
+   CDateTime LastRepoUpdate() const;
+   void UpdateRepos(bool force = false, bool wait = false, bool showProgress = false);
+ 
++  void InstallUpdates();
++
+   void OnJobComplete(unsigned int jobID, bool success, CJob* job);
+   void OnJobProgress(unsigned int jobID, unsigned int progress, unsigned int total, const CJob *job);
+ 
+diff --git a/xbmc/addons/GUIWindowAddonBrowser.cpp b/xbmc/addons/GUIWindowAddonBrowser.cpp
+index 9dad7a3..13f0a67 100644
+--- a/xbmc/addons/GUIWindowAddonBrowser.cpp
++++ b/xbmc/addons/GUIWindowAddonBrowser.cpp
+@@ -215,13 +215,7 @@ class UpdateAddons : public IRunnable
+ {
+   virtual void Run()
+   {
+-    VECADDONS addons;
+-    CAddonMgr::GetInstance().GetAllOutdatedAddons(addons, true); // get local
+-    for (VECADDONS::iterator i = addons.begin(); i != addons.end(); ++i)
+-    {
+-      std::string referer = StringUtils::Format("Referer=%s-%s.zip",(*i)->ID().c_str(),(*i)->Version().asString().c_str());
+-      CAddonInstaller::GetInstance().Install((*i)->ID(), true, referer); // force install
+-    }
++    CAddonInstaller::GetInstance().InstallUpdates();
+   }
+ };
+ 
+
+From 5d244f3cbe50ba5881ab915db8857b9189c8b7f0 Mon Sep 17 00:00:00 2001
+From: Thomas Amland <thomas.amland@gmail.com>
+Date: Fri, 21 Aug 2015 19:43:12 +0200
+Subject: [PATCH 2/4] [addons] rework repository updating
+
+---
+ .../resource.language.en_gb/resources/strings.po   |   5 +-
+ project/VS2010Express/XBMC.vcxproj                 |   2 +
+ project/VS2010Express/XBMC.vcxproj.filters         |   6 +
+ xbmc/Application.cpp                               |   7 +-
+ xbmc/LangInfo.cpp                                  |   4 +-
+ xbmc/addons/AddonDatabase.cpp                      |  46 ++--
+ xbmc/addons/AddonDatabase.h                        |  13 +-
+ xbmc/addons/AddonInstaller.cpp                     |  98 +-------
+ xbmc/addons/AddonInstaller.h                       |   4 -
+ xbmc/addons/GUIWindowAddonBrowser.cpp              |   3 +-
+ xbmc/addons/Makefile                               |   1 +
+ xbmc/addons/Repository.cpp                         | 248 +++++++++------------
+ xbmc/addons/Repository.h                           |  25 ++-
+ xbmc/addons/RepositoryUpdater.cpp                  | 185 +++++++++++++++
+ xbmc/addons/RepositoryUpdater.h                    |  79 +++++++
+ xbmc/filesystem/AddonsDirectory.cpp                |  12 +-
+ xbmc/interfaces/Builtins.cpp                       |   3 +-
+ xbmc/settings/Settings.cpp                         |   6 +
+ 18 files changed, 454 insertions(+), 293 deletions(-)
+ create mode 100644 xbmc/addons/RepositoryUpdater.cpp
+ create mode 100644 xbmc/addons/RepositoryUpdater.h
+
+diff --git a/addons/resource.language.en_gb/resources/strings.po b/addons/resource.language.en_gb/resources/strings.po
+index 356a558..edace30 100644
+--- a/addons/resource.language.en_gb/resources/strings.po
++++ b/addons/resource.language.en_gb/resources/strings.po
+@@ -13387,9 +13387,9 @@ msgctxt "#24060"
+ msgid "Would you like to disable this add-on?"
+ msgstr ""
+ 
+-#: xbmc/addons/Repository.cpp
++#: xbmc/addons/RepositoryUpdater.cpp
+ msgctxt "#24061"
+-msgid "Add-on update available!"
++msgid "Add-on updates available"
+ msgstr ""
+ 
+ #: xbmc/addons/GUIViewStateAddonBrowser.cpp
+@@ -13425,6 +13425,7 @@ msgctxt "#24067"
+ msgid "Currently downloading add-ons"
+ msgstr ""
+ 
++#: xbmc/addons/RepositoryUpdater.cpp
+ #: xbmc/filesystem/AddonsDirectory.cpp
+ msgctxt "#24068"
+ msgid "Update available"
+diff --git a/project/VS2010Express/XBMC.vcxproj b/project/VS2010Express/XBMC.vcxproj
+index 199bd8d..f1c7326 100644
+--- a/project/VS2010Express/XBMC.vcxproj
++++ b/project/VS2010Express/XBMC.vcxproj
+@@ -200,6 +200,7 @@
+     <ClCompile Include="..\..\xbmc\addons\LanguageResource.cpp" />
+     <ClCompile Include="..\..\xbmc\addons\PluginSource.cpp" />
+     <ClCompile Include="..\..\xbmc\addons\Repository.cpp" />
++    <ClCompile Include="..\..\xbmc\addons\RepositoryUpdater.cpp" />
+     <ClCompile Include="..\..\xbmc\addons\Service.cpp" />
+     <ClCompile Include="..\..\xbmc\addons\Skin.cpp" />
+     <ClCompile Include="..\..\xbmc\addons\UISoundsResource.cpp" />
+@@ -1755,6 +1756,7 @@
+     <ClInclude Include="..\..\xbmc\addons\GUIWindowAddonBrowser.h" />
+     <ClInclude Include="..\..\xbmc\addons\PluginSource.h" />
+     <ClInclude Include="..\..\xbmc\addons\Repository.h" />
++    <ClInclude Include="..\..\xbmc\addons\RepositoryUpdater.h" />
+     <ClInclude Include="..\..\xbmc\addons\Service.h" />
+     <ClInclude Include="..\..\xbmc\addons\Skin.h" />
+     <ClInclude Include="..\..\xbmc\Application.h" />
+diff --git a/project/VS2010Express/XBMC.vcxproj.filters b/project/VS2010Express/XBMC.vcxproj.filters
+index 4a8cab1..d482ee8 100644
+--- a/project/VS2010Express/XBMC.vcxproj.filters
++++ b/project/VS2010Express/XBMC.vcxproj.filters
+@@ -765,6 +765,9 @@
+     <ClCompile Include="..\..\xbmc\addons\Repository.cpp">
+       <Filter>addons</Filter>
+     </ClCompile>
++    <ClCompile Include="..\..\xbmc\addons\RepositoryUpdater.cpp">
++      <Filter>addons</Filter>
++    </ClCompile>
+     <ClCompile Include="..\..\xbmc\addons\Skin.cpp">
+       <Filter>addons</Filter>
+     </ClCompile>
+@@ -3689,6 +3692,9 @@
+     <ClInclude Include="..\..\xbmc\addons\Repository.h">
+       <Filter>addons</Filter>
+     </ClInclude>
++    <ClInclude Include="..\..\xbmc\addons\RepositoryUpdater.h">
++      <Filter>addons</Filter>
++    </ClInclude>
+     <ClInclude Include="..\..\xbmc\addons\Skin.h">
+       <Filter>addons</Filter>
+     </ClInclude>
+diff --git a/xbmc/Application.cpp b/xbmc/Application.cpp
+index 67af6c8..6e756e9 100644
+--- a/xbmc/Application.cpp
++++ b/xbmc/Application.cpp
+@@ -171,6 +171,7 @@
+ #include "utils/XMLUtils.h"
+ #include "addons/AddonInstaller.h"
+ #include "addons/AddonManager.h"
++#include "addons/RepositoryUpdater.h"
+ #include "music/tags/MusicInfoTag.h"
+ #include "music/tags/MusicInfoTagLoaderFactory.h"
+ #include "CompileInfo.h"
+@@ -1244,6 +1245,8 @@ bool CApplication::Initialize()
+   RegisterActionListener(&CSeekHandler::GetInstance());
+   RegisterActionListener(&CPlayerController::GetInstance());
+ 
++  CRepositoryUpdater::GetInstance().Start();
++
+   CLog::Log(LOGNOTICE, "initialize done");
+ 
+   m_bInitializing = false;
+@@ -4620,10 +4623,6 @@ void CApplication::ProcessSlow()
+ 
+   g_mediaManager.ProcessEvents();
+ 
+-  if (!m_pPlayer->IsPlayingVideo() &&
+-      CSettings::GetInstance().GetInt(CSettings::SETTING_GENERAL_ADDONUPDATES) != AUTO_UPDATES_NEVER)
+-    CAddonInstaller::GetInstance().UpdateRepos();
+-
+   CAEFactory::GarbageCollect();
+ 
+   // if we don't render the gui there's no reason to start the screensaver.
+diff --git a/xbmc/LangInfo.cpp b/xbmc/LangInfo.cpp
+index 0471c5c..1e2fbcc 100644
+--- a/xbmc/LangInfo.cpp
++++ b/xbmc/LangInfo.cpp
+@@ -26,6 +26,7 @@
+ #include "addons/AddonInstaller.h"
+ #include "addons/AddonManager.h"
+ #include "addons/LanguageResource.h"
++#include "addons/RepositoryUpdater.h"
+ #include "guilib/LocalizeStrings.h"
+ #include "pvr/PVRManager.h"
+ #include "settings/AdvancedSettings.h"
+@@ -658,7 +659,8 @@ bool CLangInfo::SetLanguage(bool& fallback, const std::string &strLanguage /* =
+       if (addondb.Open())
+       {
+         // update the addon repositories to check if there's a matching language addon available for download
+-        CAddonInstaller::GetInstance().UpdateRepos(true, true);
++        ADDON::CRepositoryUpdater::GetInstance().CheckForUpdates();
++        ADDON::CRepositoryUpdater::GetInstance().Await();
+ 
+         ADDON::VECADDONS languageAddons;
+         if (addondb.GetAddons(languageAddons, ADDON::ADDON_RESOURCE_LANGUAGE) && !languageAddons.empty())
+diff --git a/xbmc/addons/AddonDatabase.cpp b/xbmc/addons/AddonDatabase.cpp
+index d830a90..9f7acc7 100644
+--- a/xbmc/addons/AddonDatabase.cpp
++++ b/xbmc/addons/AddonDatabase.cpp
+@@ -465,53 +465,33 @@ int CAddonDatabase::GetRepoChecksum(const std::string& id, std::string& checksum
+   return -1;
+ }
+ 
+-CDateTime CAddonDatabase::GetRepoTimestamp(const std::string& id)
++std::pair<CDateTime, ADDON::AddonVersion> CAddonDatabase::LastChecked(const std::string& id)
+ {
+   CDateTime date;
++  AddonVersion version("0.0.0");
+   try
+   {
+-    if (NULL == m_pDB.get()) return date;
+-    if (NULL == m_pDS.get()) return date;
+-
+-    std::string strSQL = PrepareSQL("select * from repo where addonID='%s'",id.c_str());
+-    m_pDS->query(strSQL.c_str());
+-    if (!m_pDS->eof())
++    if (m_pDB.get() != nullptr && m_pDS.get() != nullptr)
+     {
+-      date.SetFromDBDateTime(m_pDS->fv("lastcheck").get_asString());
+-      return date;
++      std::string strSQL = PrepareSQL("select * from repo where addonID='%s'",id.c_str());
++      m_pDS->query(strSQL.c_str());
++      if (!m_pDS->eof())
++      {
++        date.SetFromDBDateTime(m_pDS->fv("lastcheck").get_asString());
++        version = AddonVersion(m_pDS->fv("version").get_asString());
++      }
+     }
+   }
+   catch (...)
+   {
+     CLog::Log(LOGERROR, "%s failed on repo '%s'", __FUNCTION__, id.c_str());
+   }
+-  return date;
++  return std::make_pair(date, version);
+ }
+ 
+ 
+-AddonVersion CAddonDatabase::GetRepoVersion(const std::string& id)
+-{
+-  AddonVersion version("0.0.0");
+-  try
+-  {
+-    if (NULL == m_pDB.get()) return version;
+-    if (NULL == m_pDS2.get()) return version;
+-
+-    std::string strSQL = PrepareSQL("select * from repo where addonID='%s'",id.c_str());
+-    m_pDS->query(strSQL.c_str());
+-    if (!m_pDS->eof())
+-    {
+-      return AddonVersion(m_pDS->fv("version").get_asString());
+-    }
+-  }
+-  catch (...)
+-  {
+-    CLog::Log(LOGERROR, "%s failed on addon %s", __FUNCTION__, id.c_str());
+-  }
+-  return version;
+-}
+-
+-bool CAddonDatabase::SetRepoTimestamp(const std::string& id, const std::string& time, const ADDON::AddonVersion& version)
++bool CAddonDatabase::SetLastChecked(const std::string& id,
++    const ADDON::AddonVersion& version, const std::string& time)
+ {
+   try
+   {
+diff --git a/xbmc/addons/AddonDatabase.h b/xbmc/addons/AddonDatabase.h
+index 9c5082f..ac08650 100644
+--- a/xbmc/addons/AddonDatabase.h
++++ b/xbmc/addons/AddonDatabase.h
+@@ -54,15 +54,14 @@ class CAddonDatabase : public CDatabase
+   int GetRepoChecksum(const std::string& id, std::string& checksum);
+   bool GetRepository(const std::string& id, ADDON::VECADDONS& addons);
+   bool GetRepository(int id, ADDON::VECADDONS& addons);
+-  bool SetRepoTimestamp(const std::string& id, const std::string& timestamp, const ADDON::AddonVersion& version);
++  bool SetLastChecked(const std::string& id, const ADDON::AddonVersion& version, const std::string& timestamp);
+ 
+-  /*! \brief Retrieve the time a repository was last checked
++  /*!
++   \brief Retrieve the time a repository was last checked and the version it was for
+    \param id id of the repo
+-   \return last time the repo was checked, current time if not available
+-   \sa SetRepoTimestamp */
+-  CDateTime GetRepoTimestamp(const std::string& id);
+-
+-  ADDON::AddonVersion GetRepoVersion(const std::string& id);
++   \return last time the repo was checked, or invalid CDateTime if never checked
++   */
++  std::pair<CDateTime, ADDON::AddonVersion> LastChecked(const std::string& id);
+ 
+   bool Search(const std::string& search, ADDON::VECADDONS& items);
+   static void SetPropertiesFromAddon(const ADDON::AddonPtr& addon, CFileItemPtr& item); 
+diff --git a/xbmc/addons/AddonInstaller.cpp b/xbmc/addons/AddonInstaller.cpp
+index b3ee214..84c197d 100644
+--- a/xbmc/addons/AddonInstaller.cpp
++++ b/xbmc/addons/AddonInstaller.cpp
+@@ -60,7 +60,6 @@ struct find_map : public binary_function<CAddonInstaller::JobMap::value_type, un
+ };
+ 
+ CAddonInstaller::CAddonInstaller()
+-  : m_repoUpdateJob(nullptr)
+ { }
+ 
+ CAddonInstaller::~CAddonInstaller()
+@@ -78,22 +77,12 @@ void CAddonInstaller::OnJobComplete(unsigned int jobID, bool success, CJob* job)
+     CAddonMgr::GetInstance().FindAddons();
+ 
+   CSingleLock lock(m_critSection);
+-  if (strncmp(job->GetType(), "repoupdate", 10) == 0)
+-  {
+-    // repo job finished
+-    m_repoUpdateDone.Set();
+-    m_repoUpdateJob = nullptr;
+-    lock.Leave();
+-  }
+-  else
+-  {
+-    // download job
+-    JobMap::iterator i = find_if(m_downloadJobs.begin(), m_downloadJobs.end(), bind2nd(find_map(), jobID));
+-    if (i != m_downloadJobs.end())
+-      m_downloadJobs.erase(i);
+-    lock.Leave();
+-    PrunePackageCache();
+-  }
++
++  JobMap::iterator i = find_if(m_downloadJobs.begin(), m_downloadJobs.end(), bind2nd(find_map(), jobID));
++  if (i != m_downloadJobs.end())
++    m_downloadJobs.erase(i);
++  lock.Leave();
++  PrunePackageCache();
+ 
+   CGUIMessage msg(GUI_MSG_NOTIFY_ALL, 0, 0, GUI_MSG_UPDATE);
+   g_windowManager.SendThreadMessage(msg);
+@@ -366,83 +355,14 @@ CDateTime CAddonInstaller::LastRepoUpdate() const
+   CAddonMgr::GetInstance().GetAddons(ADDON_REPOSITORY, addons);
+   for (unsigned int i = 0; i < addons.size(); i++)
+   {
+-    CDateTime lastUpdate = database.GetRepoTimestamp(addons[i]->ID());
+-    if (lastUpdate.IsValid() && lastUpdate > update)
+-      update = lastUpdate;
++    std::pair<CDateTime, AddonVersion> lastUpdate = database.LastChecked(addons[i]->ID());
++    if (lastUpdate.first.IsValid() && lastUpdate.first > update)
++      update = lastUpdate.first;
+   }
+ 
+   return update;
+ }
+ 
+-void CAddonInstaller::UpdateRepos(bool force /*= false*/, bool wait /*= false*/, bool showProgress /*= false*/)
+-{
+-  CSingleLock lock(m_critSection);
+-  if (m_repoUpdateJob != nullptr)
+-  {
+-    //Hook up dialog to running job
+-    if (showProgress && !m_repoUpdateJob->HasProgressIndicator())
+-    {
+-      auto* dialog = static_cast<CGUIDialogExtendedProgressBar*>(g_windowManager.GetWindow(WINDOW_DIALOG_EXT_PROGRESS));
+-      if (dialog)
+-        m_repoUpdateJob->SetProgressIndicators(dialog->GetHandle(g_localizeStrings.Get(24092)), nullptr);
+-    }
+-
+-    if (wait)
+-    {
+-      // wait for our job to complete
+-      lock.Leave();
+-      CLog::Log(LOGDEBUG, "%s - waiting for repository update job to finish...", __FUNCTION__);
+-      m_repoUpdateDone.Wait();
+-    }
+-    return;
+-  }
+-
+-  // don't run repo update jobs while on the login screen which runs under the master profile
+-  if(!force && (g_windowManager.GetActiveWindow() & WINDOW_ID_MASK) == WINDOW_LOGIN_SCREEN)
+-    return;
+-
+-  if (!force && m_repoUpdateWatch.IsRunning() && m_repoUpdateWatch.GetElapsedSeconds() < 600)
+-    return;
+-
+-  CAddonDatabase database;
+-  if (!database.Open())
+-    return;
+-
+-  m_repoUpdateWatch.StartZero();
+-
+-  VECADDONS addons;
+-  if (CAddonMgr::GetInstance().GetAddons(ADDON_REPOSITORY, addons))
+-  {
+-    for (const auto& repo : addons)
+-    {
+-      CDateTime lastUpdate = database.GetRepoTimestamp(repo->ID());
+-      if (force || !lastUpdate.IsValid() || lastUpdate + CDateTimeSpan(0, 24, 0, 0) < CDateTime::GetCurrentDateTime()
+-        || repo->Version() != database.GetRepoVersion(repo->ID()))
+-      {
+-        CLog::Log(LOGDEBUG, "Checking repositories for updates (triggered by %s)", repo->Name().c_str());
+-
+-        m_repoUpdateJob = new CRepositoryUpdateJob(addons);
+-        if (showProgress)
+-        {
+-          auto* dialog = static_cast<CGUIDialogExtendedProgressBar*>(g_windowManager.GetWindow(WINDOW_DIALOG_EXT_PROGRESS));
+-          if (dialog)
+-            m_repoUpdateJob->SetProgressIndicators(dialog->GetHandle(g_localizeStrings.Get(24092)), nullptr);
+-        }
+-        CJobManager::GetInstance().AddJob(m_repoUpdateJob, this);
+-        if (wait)
+-        {
+-          // wait for our job to complete
+-          lock.Leave();
+-          CLog::Log(LOGDEBUG, "%s - waiting for this repository update job to finish...", __FUNCTION__);
+-          m_repoUpdateDone.Wait();
+-        }
+-
+-        return;
+-      }
+-    }
+-  }
+-}
+-
+ bool CAddonInstaller::HasJob(const std::string& ID) const
+ {
+   CSingleLock lock(m_critSection);
+diff --git a/xbmc/addons/AddonInstaller.h b/xbmc/addons/AddonInstaller.h
+index 70c545a..ed9a3fd 100644
+--- a/xbmc/addons/AddonInstaller.h
++++ b/xbmc/addons/AddonInstaller.h
+@@ -108,7 +108,6 @@ class CAddonInstaller : public IJobCallback
+    \return the last time a repository was updated.
+    */
+   CDateTime LastRepoUpdate() const;
+-  void UpdateRepos(bool force = false, bool wait = false, bool showProgress = false);
+ 
+   void InstallUpdates();
+ 
+@@ -162,9 +161,6 @@ class CAddonInstaller : public IJobCallback
+ 
+   CCriticalSection m_critSection;
+   JobMap m_downloadJobs;
+-  CStopWatch m_repoUpdateWatch;   ///< repository updates are done based on this counter
+-  ADDON::CRepositoryUpdateJob* m_repoUpdateJob;
+-  CEvent m_repoUpdateDone;        ///< event set when the repository updates are complete
+ };
+ 
+ class CAddonInstallJob : public CFileOperationJob
+diff --git a/xbmc/addons/GUIWindowAddonBrowser.cpp b/xbmc/addons/GUIWindowAddonBrowser.cpp
+index 13f0a67..8c7c0a6 100644
+--- a/xbmc/addons/GUIWindowAddonBrowser.cpp
++++ b/xbmc/addons/GUIWindowAddonBrowser.cpp
+@@ -20,6 +20,7 @@
+ 
+ #include "GUIWindowAddonBrowser.h"
+ #include "addons/AddonManager.h"
++#include "addons/RepositoryUpdater.h"
+ #include "GUIDialogAddonInfo.h"
+ #include "GUIDialogAddonSettings.h"
+ #include "dialogs/GUIDialogBusy.h"
+@@ -120,7 +121,7 @@ bool CGUIWindowAddonBrowser::OnMessage(CGUIMessage& message)
+       }
+       else if (iControl == CONTROL_CHECK_FOR_UPDATES)
+       {
+-        CAddonInstaller::GetInstance().UpdateRepos(true, false, true);
++        CRepositoryUpdater::GetInstance().CheckForUpdates();
+         return true;
+       }
+       else if (m_viewControl.HasControl(iControl))  // list/thumb control
+diff --git a/xbmc/addons/Makefile b/xbmc/addons/Makefile
+index 29926f2..7934e23 100644
+--- a/xbmc/addons/Makefile
++++ b/xbmc/addons/Makefile
+@@ -21,6 +21,7 @@ SRCS=Addon.cpp \
+      LanguageResource.cpp \
+      PluginSource.cpp \
+      Repository.cpp \
++     RepositoryUpdater.cpp \
+      Scraper.cpp \
+      ScreenSaver.cpp \
+      Service.cpp \
+diff --git a/xbmc/addons/Repository.cpp b/xbmc/addons/Repository.cpp
+index b96855a..0795c1a 100644
+--- a/xbmc/addons/Repository.cpp
++++ b/xbmc/addons/Repository.cpp
+@@ -25,6 +25,7 @@
+ #include "addons/AddonDatabase.h"
+ #include "addons/AddonInstaller.h"
+ #include "addons/AddonManager.h"
++#include "addons/RepositoryUpdater.h"
+ #include "dialogs/GUIDialogYesNo.h"
+ #include "dialogs/GUIDialogKaiToast.h"
+ #include "filesystem/File.h"
+@@ -199,8 +200,9 @@ bool CRepository::Parse(const DirInfo& dir, VECADDONS &result)
+ 
+ void CRepository::OnPostInstall(bool update, bool modal)
+ {
+-  // force refresh of addon repositories
+-  CAddonInstaller::GetInstance().UpdateRepos(true, false, true);
++  if (!update)
++    // Notify updater there is a new repo
++    CRepositoryUpdater::GetInstance().ScheduleUpdate();
+ }
+ 
+ void CRepository::OnPostUnInstall()
+@@ -208,15 +210,9 @@ void CRepository::OnPostUnInstall()
+   CAddonDatabase database;
+   database.Open();
+   database.DeleteRepository(ID());
+-
+-  // force refresh of addon repositories
+-  CAddonInstaller::GetInstance().UpdateRepos(true, false, true);
+ }
+ 
+-CRepositoryUpdateJob::CRepositoryUpdateJob(const VECADDONS &repos)
+-  : m_repos(repos)
+-{
+-}
++CRepositoryUpdateJob::CRepositoryUpdateJob(const RepositoryPtr& repo) : m_repo(repo) {}
+ 
+ void MergeAddons(map<string, AddonPtr> &addons, const VECADDONS &new_addons)
+ {
+@@ -235,170 +231,144 @@ void MergeAddons(map<string, AddonPtr> &addons, const VECADDONS &new_addons)
+ 
+ bool CRepositoryUpdateJob::DoWork()
+ {
+-  map<string, AddonPtr> addons;
+-  for (VECADDONS::const_iterator i = m_repos.begin(); i != m_repos.end(); ++i)
++  CLog::Log(LOGDEBUG, "CRepositoryUpdateJob[%s] checking for updates.", m_repo->ID().c_str());
++  CAddonDatabase database;
++  database.Open();
++
++  std::string oldChecksum;
++  if (!database.GetRepoChecksum(m_repo->ID(), oldChecksum))
++    oldChecksum = "";
++
++  std::string newChecksum;
++  VECADDONS addons;
++  STATUS status = FetchIfChanged(oldChecksum, newChecksum, addons);
++
++  database.SetLastChecked(m_repo->ID(), m_repo->Version(),
++      CDateTime::GetCurrentDateTime().GetAsDBDateTime());
++
++  if (status == ERROR)
+   {
+-    const RepositoryPtr repo = std::dynamic_pointer_cast<CRepository>(*i);
+-    VECADDONS newAddons;
+-    if (GrabAddons(repo, newAddons))
+-      MergeAddons(addons, newAddons);
++    return false;
++  }
++  else if (status == NOT_MODIFIED)
++  {
++    CLog::Log(LOGDEBUG, "CRepositoryUpdateJob[%s] checksum not changed.", m_repo->ID().c_str());
++    return true;
+   }
+-  if (addons.empty())
+-    return true; //Nothing to do
+ 
+-  // check for updates
+-  CAddonDatabase database;
+-  database.Open();
+-  database.BeginMultipleExecute();
++  database.AddRepository(m_repo->ID(), addons, newChecksum, m_repo->Version());
+ 
+-  CTextureDatabase textureDB;
+-  textureDB.Open();
+-  textureDB.BeginMultipleExecute();
+-  VECADDONS notifications;
+-  for (map<string, AddonPtr>::const_iterator i = addons.begin(); i != addons.end(); ++i)
++  // Invalidate art. TODO: this seems a bit excessive
+   {
+-    // manager told us to feck off
+-    if (ShouldCancel(0,0))
+-      break;
++    CTextureDatabase textureDB;
++    textureDB.Open();
++    textureDB.BeginMultipleExecute();
+ 
+-    AddonPtr newAddon = i->second;
+-    bool deps_met = CAddonInstaller::GetInstance().CheckDependencies(newAddon, &database);
+-    if (!deps_met && newAddon->Props().broken.empty())
+-      newAddon->Props().broken = "DEPSNOTMET";
+-
+-    // invalidate the art associated with this item
+-    if (!newAddon->Props().fanart.empty())
+-      textureDB.InvalidateCachedTexture(newAddon->Props().fanart);
+-    if (!newAddon->Props().icon.empty())
+-      textureDB.InvalidateCachedTexture(newAddon->Props().icon);
+-
+-    AddonPtr addon;
+-    CAddonMgr::GetInstance().GetAddon(newAddon->ID(),addon);
+-    if (addon && newAddon->Version() > addon->Version() &&
+-        !database.IsAddonBlacklisted(newAddon->ID(),newAddon->Version().asString()) &&
+-        deps_met)
++    for (const auto& addon : addons)
+     {
+-      if (CSettings::GetInstance().GetInt(CSettings::SETTING_GENERAL_ADDONUPDATES) == AUTO_UPDATES_ON)
+-      {
+-        string referer;
+-        if (URIUtils::IsInternetStream(newAddon->Path()))
+-          referer = StringUtils::Format("Referer=%s-%s.zip",addon->ID().c_str(),addon->Version().asString().c_str());
+-
+-        if (newAddon->CanInstall(referer))
+-          CAddonInstaller::GetInstance().Install(addon->ID(), true, referer);
+-      }
+-      else
+-        notifications.push_back(addon);
++      if (!addon->Props().fanart.empty())
++        textureDB.InvalidateCachedTexture(addon->Props().fanart);
++      if (!addon->Props().icon.empty())
++        textureDB.InvalidateCachedTexture(addon->Props().icon);
+     }
++    textureDB.CommitMultipleExecute();
++  }
++
++  //Update broken status
++  database.BeginMultipleExecute();
++  for (const auto& addon : addons)
++  {
++    AddonPtr localAddon;
++    CAddonMgr::GetInstance().GetAddon(addon->ID(), localAddon);
++
++    if (localAddon && localAddon->Version() > addon->Version())
++      //We have a newer verison locally
++      continue;
++
++    if (database.GetAddonVersion(addon->ID()) > addon->Version())
++      //Newer verison in db (ie. in a different repo)
++      continue;
+ 
+-    // Check if we should mark the add-on as broken.  We may have a newer version
+-    // of this add-on in the database or installed - if so, we keep it unbroken.
+-    bool haveNewer = (addon && addon->Version() > newAddon->Version()) ||
+-                     database.GetAddonVersion(newAddon->ID()) > newAddon->Version();
+-    if (!haveNewer)
++    bool depsMet = CAddonInstaller::GetInstance().CheckDependencies(addon);
++    if (!depsMet && addon->Props().broken.empty())
++      addon->Props().broken = "DEPSNOTMET";
++
++    if (localAddon)
+     {
+-      // if the add-on is installed and has just been marked as broken (but not in the database yet)
+-      // ask the user whether he wants to disable the add-on
+-      if (addon && !newAddon->Props().broken.empty() && database.IsAddonBroken(newAddon->ID()).empty())
++      bool brokenInDb = !database.IsAddonBroken(addon->ID()).empty();
++      if (!addon->Props().broken.empty() && !brokenInDb)
+       {
++        //newly broken
+         std::string line = g_localizeStrings.Get(24096);
+-        if (newAddon->Props().broken == "DEPSNOTMET")
++        if (addon->Props().broken == "DEPSNOTMET")
+           line = g_localizeStrings.Get(24104);
+-        if (CGUIDialogYesNo::ShowAndGetInput(CVariant{newAddon->Name()}, CVariant{line}, CVariant{24097}, CVariant{""}))
+-          CAddonMgr::GetInstance().DisableAddon(newAddon->ID());
++        if (CGUIDialogYesNo::ShowAndGetInput(CVariant{addon->Name()}, CVariant{line}, CVariant{24097}, CVariant{""}))
++          CAddonMgr::GetInstance().DisableAddon(addon->ID());
++
++        CLog::Log(LOGDEBUG, "CRepositoryUpdateJob[%s] addon '%s' marked broken. reason: \"%s\"",
++             m_repo->ID().c_str(), addon->ID().c_str(), addon->Props().broken.c_str());
+ 
+-        CEventLog::GetInstance().Add(EventPtr(new CAddonManagementEvent(newAddon, 24096)));
++        CEventLog::GetInstance().Add(EventPtr(new CAddonManagementEvent(addon, 24096)));
++      }
++      else if (addon->Props().broken.empty() && brokenInDb)
++      {
++        //Unbroken
++        CLog::Log(LOGDEBUG, "CRepositoryUpdateJob[%s] addon '%s' unbroken '%s'",
++            m_repo->ID().c_str(), addon->ID().c_str());
+       }
+-      database.BreakAddon(newAddon->ID(), newAddon->Props().broken);
+     }
++
++    //Update broken status
++    database.BreakAddon(addon->ID(), addon->Props().broken);
+   }
+   database.CommitMultipleExecute();
+-  textureDB.CommitMultipleExecute();
+-  MarkFinished();
+-  if (!notifications.empty() && CSettings::GetInstance().GetBool(CSettings::SETTING_GENERAL_ADDONNOTIFICATIONS))
+-  {
+-    if (notifications.size() == 1)
+-      CGUIDialogKaiToast::QueueNotification(notifications[0]->Icon(),
+-                                            g_localizeStrings.Get(24061),
+-                                            notifications[0]->Name(),TOAST_DISPLAY_TIME,false,TOAST_DISPLAY_TIME);
+-    else
+-      CGUIDialogKaiToast::QueueNotification("",
+-                                            g_localizeStrings.Get(24001),
+-                                            g_localizeStrings.Get(24061),TOAST_DISPLAY_TIME,false,TOAST_DISPLAY_TIME);
+-  }
+-
+   return true;
+ }
+ 
+-bool CRepositoryUpdateJob::GrabAddons(const RepositoryPtr& repo, VECADDONS& addons)
++CRepositoryUpdateJob::STATUS CRepositoryUpdateJob::FetchIfChanged(const std::string& oldChecksum,
++    std::string& checksum, VECADDONS& addons)
+ {
+-  SetText(StringUtils::Format(g_localizeStrings.Get(24093).c_str(), repo->Name().c_str()));
+-  const unsigned int total = repo->m_dirs.size() * 2;
+-
+-  if (ShouldCancel(0, total))
+-    return false;
+-
+-  CAddonDatabase database;
+-  database.Open();
+-  string oldReposum;
+-  if (!database.GetRepoChecksum(repo->ID(), oldReposum))
+-    oldReposum = "";
+-
+-  string reposum;
+-  for (CRepository::DirList::const_iterator it  = repo->m_dirs.begin(); it != repo->m_dirs.end(); ++it)
++  checksum = "";
++  for (const auto& dir : m_repo->m_dirs)
+   {
+-    if (ShouldCancel(std::distance(repo->m_dirs.cbegin(), it), total))
+-      return false;
+-    if (!it->checksum.empty())
++    if (!dir.checksum.empty())
+     {
+-      const string dirsum = CRepository::FetchChecksum(it->checksum);
++      if (ShouldCancel(0, 0))
++        return ERROR;
++
++      const string dirsum = CRepository::FetchChecksum(dir.checksum);
+       if (dirsum.empty())
+       {
+-        CLog::Log(LOGERROR, "Failed to fetch checksum for directory listing %s for repository %s. ", (*it).info.c_str(), repo->ID().c_str());
+-        return false;
++        CLog::Log(LOGERROR, "CRepositoryUpdateJob[%s] failed read checksum for "
++            "directory '%s'", m_repo->ID().c_str(), dir.info.c_str());
++        return ERROR;
+       }
+-      reposum += dirsum;
++      checksum += dirsum;
+     }
+   }
+ 
+-  if (oldReposum != reposum || oldReposum.empty())
++  if (oldChecksum == checksum && !oldChecksum.empty())
++    return NOT_MODIFIED;
++
++  std::map<string, AddonPtr> uniqueAddons;
++  for (const auto& dir : m_repo->m_dirs)
+   {
+-    map<string, AddonPtr> uniqueAddons;
+-    for (CRepository::DirList::const_iterator it = repo->m_dirs.begin(); it != repo->m_dirs.end(); ++it)
+-    {
+-      if (ShouldCancel(repo->m_dirs.size() + std::distance(repo->m_dirs.cbegin(), it), total))
+-        return false;
+-      VECADDONS addons;
+-      if (!CRepository::Parse(*it, addons))
+-      { //TODO: Hash is invalid and should not be saved, but should we fail?
+-        //We can still report a partial addon listing.
+-        CLog::Log(LOGERROR, "Failed to read directory listing %s for repository %s. ", (*it).info.c_str(), repo->ID().c_str());
+-        return false;
+-      }
+-      MergeAddons(uniqueAddons, addons);
+-    }
++    if (ShouldCancel(0, 0))
++      return ERROR;
+ 
+-    bool add = true;
+-    if (!repo->Props().libname.empty())
++    VECADDONS addons;
++    if (!CRepository::Parse(dir, addons))
+     {
+-      CFileItemList dummy;
+-      string s = StringUtils::Format("plugin://%s/?action=update", repo->ID().c_str());
+-      add = CDirectory::GetDirectory(s, dummy);
++      CLog::Log(LOGERROR, "CRepositoryUpdateJob[%s] failed to read or parse "
++          "directory '%s'", m_repo->ID().c_str(), dir.info.c_str());
++      return ERROR;
+     }
+-    if (add)
+-    {
+-      for (map<string, AddonPtr>::const_iterator i = uniqueAddons.begin(); i != uniqueAddons.end(); ++i)
+-        addons.push_back(i->second);
+-      database.AddRepository(repo->ID(), addons, reposum, repo->Version());
+-    }
+-  }
+-  else
+-  {
+-    CLog::Log(LOGDEBUG, "Checksum for repository %s not changed.", repo->ID().c_str());
+-    database.GetRepository(repo->ID(), addons);
+-    database.SetRepoTimestamp(repo->ID(), CDateTime::GetCurrentDateTime().GetAsDBDateTime(), repo->Version());
++    MergeAddons(uniqueAddons, addons);
+   }
+-  SetProgress(total, total);
+-  return true;
++
++  for (const auto& kv : uniqueAddons)
++    addons.push_back(kv.second);
++
++  return OK;
+ }
+ 
+diff --git a/xbmc/addons/Repository.h b/xbmc/addons/Repository.h
+index 078a3e1..31a5fb0 100644
+--- a/xbmc/addons/Repository.h
++++ b/xbmc/addons/Repository.h
+@@ -25,8 +25,6 @@
+ 
+ namespace ADDON
+ {
+-  class CRepository;
+-  typedef std::shared_ptr<CRepository> RepositoryPtr;
+   class CRepository : public CAddon
+   {
+   public:
+@@ -66,18 +64,29 @@ namespace ADDON
+     CRepository(const CRepository &rhs);
+   };
+ 
+-  class CRepositoryUpdateJob : public CProgressJob
++  typedef std::shared_ptr<CRepository> RepositoryPtr;
++
++
++  class CRepositoryUpdateJob : public CJob
+   {
+   public:
+-    CRepositoryUpdateJob(const VECADDONS& repos);
++    CRepositoryUpdateJob(const RepositoryPtr& repo);
+     virtual ~CRepositoryUpdateJob() {}
+-
+-    virtual const char *GetType() const { return "repoupdate"; };
+     virtual bool DoWork();
++    const RepositoryPtr& GetAddon() const { return m_repo; };
++
+   private:
+-    bool GrabAddons(const RepositoryPtr& repo, VECADDONS& addons);
++    enum STATUS
++    {
++      OK,
++      NOT_MODIFIED,
++      ERROR
++    };
++
++    STATUS FetchIfChanged(const std::string& oldChecksum,
++        std::string& checksum, VECADDONS& addons);
+ 
+-    VECADDONS m_repos;
++    const RepositoryPtr m_repo;
+   };
+ }
+ 
+diff --git a/xbmc/addons/RepositoryUpdater.cpp b/xbmc/addons/RepositoryUpdater.cpp
+new file mode 100644
+index 0000000..d632738
+--- /dev/null
++++ b/xbmc/addons/RepositoryUpdater.cpp
+@@ -0,0 +1,185 @@
++#pragma once
++/*
++ *      Copyright (C) 2015 Team Kodi
++ *      http://kodi.tv
++ *
++ *  This Program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation; either version 2, or (at your option)
++ *  any later version.
++ *
++ *  This Program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with XBMC; see the file COPYING.  If not, see
++ *  <http://www.gnu.org/licenses/>.
++ *
++ */
++
++#include "RepositoryUpdater.h"
++#include "Application.h"
++#include "addons/AddonInstaller.h"
++#include "addons/AddonManager.h"
++#include "dialogs/GUIDialogExtendedProgressBar.h"
++#include "guilib/GUIWindowManager.h"
++#include "settings/Settings.h"
++#include "dialogs/GUIDialogKaiToast.h"
++#include "threads/SingleLock.h"
++#include "utils/JobManager.h"
++#include "utils/log.h"
++#include <algorithm>
++#include <vector>
++
++namespace ADDON
++{
++
++CRepositoryUpdater::CRepositoryUpdater() : m_timer(this), m_doneEvent(true) {}
++
++CRepositoryUpdater &CRepositoryUpdater::GetInstance()
++{
++  static CRepositoryUpdater instance;
++  return instance;
++}
++
++void CRepositoryUpdater::Start()
++{
++  ScheduleUpdate();
++}
++
++void CRepositoryUpdater::OnJobComplete(unsigned int jobID, bool success, CJob* job)
++{
++  CSingleLock lock(m_criticalSection);
++  m_jobs.erase(std::find(m_jobs.begin(), m_jobs.end(), job));
++  if (m_jobs.empty())
++  {
++    CLog::Log(LOGDEBUG, "CRepositoryUpdater: done.");
++
++    if (m_progressHandle != nullptr)
++    {
++      m_progressHandle->MarkFinished();
++      m_progressHandle = nullptr;
++    }
++    m_doneEvent.Set();
++
++    if (CSettings::GetInstance().GetInt(CSettings::SETTING_GENERAL_ADDONUPDATES) == AUTO_UPDATES_NOTIFY)
++    {
++      VECADDONS hasUpdate;
++      if (CAddonMgr::GetInstance().GetAllOutdatedAddons(hasUpdate) && !hasUpdate.empty())
++      {
++        if (hasUpdate.size() == 1)
++          CGUIDialogKaiToast::QueueNotification(
++              hasUpdate[0]->Icon(), hasUpdate[0]->Name(), g_localizeStrings.Get(24068),
++              TOAST_DISPLAY_TIME, false, TOAST_DISPLAY_TIME);
++        else
++          CGUIDialogKaiToast::QueueNotification(
++              "", g_localizeStrings.Get(24001), g_localizeStrings.Get(24061),
++              TOAST_DISPLAY_TIME, false, TOAST_DISPLAY_TIME);
++      }
++    }
++
++    if (CSettings::GetInstance().GetInt(CSettings::SETTING_GENERAL_ADDONUPDATES) == AUTO_UPDATES_ON)
++      CAddonInstaller::GetInstance().InstallUpdates();
++
++    ScheduleUpdate();
++  }
++}
++
++void CRepositoryUpdater::CheckForUpdates(bool showProgress)
++{
++  VECADDONS addons;
++  if (CAddonMgr::GetInstance().GetAddons(ADDON_REPOSITORY, addons) && !addons.empty())
++  {
++    CSingleLock lock(m_criticalSection);
++    if (m_progressHandle == nullptr)
++    {
++      auto* dialog = static_cast<CGUIDialogExtendedProgressBar*>(g_windowManager.GetWindow(WINDOW_DIALOG_EXT_PROGRESS));
++      if (dialog)
++        m_progressHandle = dialog->GetHandle(g_localizeStrings.Get(24092));
++    }
++
++    for (const auto& addon : addons)
++      CheckForUpdates(std::static_pointer_cast<ADDON::CRepository>(addon));
++  }
++}
++
++void CRepositoryUpdater::CheckForUpdates(const ADDON::RepositoryPtr& repo)
++{
++  CSingleLock lock(m_criticalSection);
++  if (!HasJob(repo))
++  {
++    auto* job = new CRepositoryUpdateJob(repo);
++    m_jobs.push_back(job);
++    m_doneEvent.Reset();
++    CJobManager::GetInstance().AddJob(job, this);
++  }
++}
++
++bool CRepositoryUpdater::HasJob(const RepositoryPtr& repo) const
++{
++  CSingleLock lock(m_criticalSection);
++  return std::find_if(m_jobs.begin(), m_jobs.end(),
++      [&](CRepositoryUpdateJob* job){ return job->GetAddon()->ID() == repo->ID(); }) != m_jobs.end();
++}
++
++void CRepositoryUpdater::Await()
++{
++  m_doneEvent.Wait();
++}
++
++void CRepositoryUpdater::OnTimeout()
++{
++  CLog::Log(LOGDEBUG,"CRepositoryUpdater: running scheduled update");
++  CheckForUpdates();
++}
++
++void CRepositoryUpdater::OnSettingChanged(const CSetting* setting)
++{
++  if (setting->GetId() == CSettings::SETTING_GENERAL_ADDONUPDATES)
++  {
++    ScheduleUpdate();
++  }
++}
++
++void CRepositoryUpdater::ScheduleUpdate()
++{
++  const CDateTimeSpan interval(0, 24, 0, 0);
++
++  CSingleLock lock(m_criticalSection);
++  m_timer.Stop(true);
++
++  if (CSettings::GetInstance().GetInt(CSettings::SETTING_GENERAL_ADDONUPDATES) == AUTO_UPDATES_NEVER)
++    return;
++
++  VECADDONS repos;
++  if (!CAddonMgr::GetInstance().GetAddons(ADDON_REPOSITORY, repos))
++    return;
++
++  // Get next update based on previous update times
++  CAddonDatabase db;
++  db.Open();
++  std::vector<CDateTime> updateTimes;
++  std::transform(repos.begin(), repos.end(), std::back_inserter(updateTimes),
++      [&](const AddonPtr& repo)
++      {
++        auto lastCheck = db.LastChecked(repo->ID());
++        if (!lastCheck.first.IsValid() || lastCheck.second != repo->Version())
++          return CDateTime();
++        return lastCheck.first;
++      });
++
++  auto previous = *std::min_element(updateTimes.begin(), updateTimes.end());
++  auto next = std::max(CDateTime::GetCurrentDateTime(), previous + interval);
++
++  int delta = std::max(1, (next - CDateTime::GetCurrentDateTime()).GetSecondsTotal() * 1000);
++
++  CLog::Log(LOGDEBUG,"CRepositoryUpdater: previous update at %s. next update at %s",
++      previous.GetAsLocalizedDateTime().c_str(),
++      next.GetAsLocalizedDateTime().c_str());
++
++  if (!m_timer.Start(delta))
++    CLog::Log(LOGERROR,"CRepositoryUpdater: failed to start timer");
++}
++}
+diff --git a/xbmc/addons/RepositoryUpdater.h b/xbmc/addons/RepositoryUpdater.h
+new file mode 100644
+index 0000000..758501e
+--- /dev/null
++++ b/xbmc/addons/RepositoryUpdater.h
+@@ -0,0 +1,79 @@
++#pragma once
++/*
++ *      Copyright (C) 2015 Team Kodi
++ *      http://kodi.tv
++ *
++ *  This Program is free software; you can redistribute it and/or modify
++ *  it under the terms of the GNU General Public License as published by
++ *  the Free Software Foundation; either version 2, or (at your option)
++ *  any later version.
++ *
++ *  This Program is distributed in the hope that it will be useful,
++ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
++ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
++ *  GNU General Public License for more details.
++ *
++ *  You should have received a copy of the GNU General Public License
++ *  along with XBMC; see the file COPYING.  If not, see
++ *  <http://www.gnu.org/licenses/>.
++ *
++ */
++
++#include "addons/Repository.h"
++#include "dialogs/GUIDialogExtendedProgressBar.h"
++#include "threads/CriticalSection.h"
++#include "threads/Timer.h"
++#include <vector>
++
++namespace ADDON
++{
++
++class CRepositoryUpdater : private ITimerCallback, private IJobCallback, public ISettingCallback
++{
++public:
++  static CRepositoryUpdater &GetInstance();
++
++  virtual ~CRepositoryUpdater() {}
++
++  void Start();
++
++  /**
++   * Check a single repository for updates.
++   */
++  void CheckForUpdates(const ADDON::RepositoryPtr& repo);
++
++  /**
++   * Check all repositories for updates.
++   */
++  void CheckForUpdates(bool showProgress=true);
++
++  /**
++   * Wait for any pending/in-progress updates to complete.
++   */
++  void Await();
++
++  /**
++   * Schedule an automatic update to run based on setting and previous update
++   * times. May be called when there external changes this updater must know
++   * about. Any previously scheduled update will be cancelled.
++   */
++  void ScheduleUpdate();
++
++  virtual void OnSettingChanged(const CSetting* setting) override;
++
++private:
++  CRepositoryUpdater();
++
++  virtual void OnJobComplete(unsigned int jobID, bool success, CJob *job) override;
++
++  virtual void OnTimeout() override;
++
++  bool HasJob(const RepositoryPtr& repo) const;
++
++  CGUIDialogProgressBarHandle* m_progressHandle;
++  CCriticalSection m_criticalSection;
++  CTimer m_timer;
++  CEvent m_doneEvent;
++  std::vector<CRepositoryUpdateJob*> m_jobs;
++};
++}
+diff --git a/xbmc/filesystem/AddonsDirectory.cpp b/xbmc/filesystem/AddonsDirectory.cpp
+index be9207e..045bef2 100644
+--- a/xbmc/filesystem/AddonsDirectory.cpp
++++ b/xbmc/filesystem/AddonsDirectory.cpp
+@@ -28,12 +28,15 @@
+ #include "FileItem.h"
+ #include "addons/AddonInstaller.h"
+ #include "addons/PluginSource.h"
++#include "addons/RepositoryUpdater.h"
+ #include "guilib/TextureManager.h"
+ #include "File.h"
+ #include "SpecialProtocol.h"
+ #include "utils/URIUtils.h"
+ #include "utils/StringUtils.h"
++#include "utils/log.h"
+ #include "URL.h"
++#include <dialogs/GUIDialogOK.h>
+ 
+ using namespace ADDON;
+ 
+@@ -330,8 +333,7 @@ static bool HaveOrphaned()
+ static void OutdatedAddons(const CURL& path, CFileItemList &items)
+ {
+   VECADDONS addons;
+-  // Wait for running update to complete
+-  CAddonInstaller::GetInstance().UpdateRepos(false, true);
++  CRepositoryUpdater::GetInstance().Await();
+   CAddonMgr::GetInstance().GetAllOutdatedAddons(addons);
+   CAddonsDirectory::GenerateAddonListing(path, addons, items, g_localizeStrings.Get(24043));
+ 
+@@ -372,12 +374,14 @@ static bool Browse(const CURL& path, CFileItemList &items)
+     AddonPtr addon;
+     if (!CAddonMgr::GetInstance().GetAddon(repo, addon, ADDON_REPOSITORY))
+       return false;
+-    //Wait for runnig update to complete
+-    CAddonInstaller::GetInstance().UpdateRepos(false, true);
++
++    CRepositoryUpdater::GetInstance().Await();
++
+     CAddonDatabase database;
+     database.Open();
+     if (!database.GetRepository(addon->ID(), addons))
+       return false;
++
+     items.SetProperty("reponame", addon->Name());
+     items.SetLabel(addon->Name());
+   }
+diff --git a/xbmc/interfaces/Builtins.cpp b/xbmc/interfaces/Builtins.cpp
+index 784d9be..b5e8fe4 100644
+--- a/xbmc/interfaces/Builtins.cpp
++++ b/xbmc/interfaces/Builtins.cpp
+@@ -48,6 +48,7 @@
+ #include "addons/AddonInstaller.h"
+ #include "addons/AddonManager.h"
+ #include "addons/PluginSource.h"
++#include "addons/RepositoryUpdater.h"
+ #include "addons/Skin.h"
+ #include "interfaces/generic/ScriptInvocationManager.h"
+ #include "interfaces/AnnouncementManager.h"
+@@ -1801,7 +1802,7 @@ int CBuiltins::Execute(const std::string& execString)
+   }
+   else if (execute == "updateaddonrepos")
+   {
+-    CAddonInstaller::GetInstance().UpdateRepos(true);
++    CRepositoryUpdater::GetInstance().CheckForUpdates();
+   }
+   else if (execute == "updatelocaladdons")
+   {
+diff --git a/xbmc/settings/Settings.cpp b/xbmc/settings/Settings.cpp
+index 68aa959..9ae566a 100644
+--- a/xbmc/settings/Settings.cpp
++++ b/xbmc/settings/Settings.cpp
+@@ -26,6 +26,7 @@
+ #include "LangInfo.h"
+ #include "Util.h"
+ #include "events/EventLog.h"
++#include "addons/RepositoryUpdater.h"
+ #include "addons/Skin.h"
+ #include "cores/AudioEngine/AEFactory.h"
+ #include "cores/AudioEngine/DSPAddons/ActiveAEDSP.h"
+@@ -608,6 +609,7 @@ void CSettings::Uninitialize()
+   m_settingsManager->UnregisterCallback(&g_passwordManager);
+   m_settingsManager->UnregisterCallback(&PVR::g_PVRManager);
+   m_settingsManager->UnregisterCallback(&CRssManager::GetInstance());
++  m_settingsManager->UnregisterCallback(&ADDON::CRepositoryUpdater::GetInstance());
+ #if defined(TARGET_LINUX)
+   m_settingsManager->UnregisterCallback(&g_timezone);
+ #endif // defined(TARGET_LINUX)
+@@ -1199,6 +1201,10 @@ void CSettings::InitializeISettingCallbacks()
+   settingSet.insert(CSettings::SETTING_AUDIOOUTPUT_DSPSETTINGS);
+   settingSet.insert(CSettings::SETTING_AUDIOOUTPUT_DSPRESETDB);
+   m_settingsManager->RegisterCallback(&ActiveAE::CActiveAEDSP::GetInstance(), settingSet);
++
++  settingSet.clear();
++  settingSet.insert(CSettings::SETTING_GENERAL_ADDONUPDATES);
++  m_settingsManager->RegisterCallback(&ADDON::CRepositoryUpdater::GetInstance(), settingSet);
+ }
+ 
+ bool CSettings::Reset()
+
+From cb0997c338ecf84ffc421a92f51dd1ec58580b6c Mon Sep 17 00:00:00 2001
+From: Thomas Amland <thomas.amland@gmail.com>
+Date: Sat, 22 Aug 2015 14:36:33 +0200
+Subject: [PATCH 3/4] [addons] fix repository install hooks
+
+notify updater every time the list of active repositories change
+---
+ xbmc/addons/Addon.cpp      | 14 ++++++++++++++
+ xbmc/addons/Repository.cpp | 14 --------------
+ xbmc/addons/Repository.h   |  3 ---
+ 3 files changed, 14 insertions(+), 17 deletions(-)
+
+diff --git a/xbmc/addons/Addon.cpp b/xbmc/addons/Addon.cpp
+index 366125e..fa0760b 100644
+--- a/xbmc/addons/Addon.cpp
++++ b/xbmc/addons/Addon.cpp
+@@ -22,6 +22,7 @@
+ #include "AddonManager.h"
+ #include "addons/Service.h"
+ #include "ContextMenuManager.h"
++#include "RepositoryUpdater.h"
+ #include "settings/Settings.h"
+ #include "filesystem/Directory.h"
+ #include "filesystem/File.h"
+@@ -647,6 +648,9 @@ void OnEnabled(const std::string& id)
+ 
+   if (CAddonMgr::GetInstance().GetAddon(id, addon, ADDON_CONTEXT_ITEM))
+     CContextMenuManager::GetInstance().Register(std::static_pointer_cast<CContextMenuAddon>(addon));
++
++  if (CAddonMgr::GetInstance().GetAddon(id, addon, ADDON_REPOSITORY))
++    CRepositoryUpdater::GetInstance().ScheduleUpdate(); //notify updater there is a new addon
+ }
+ 
+ void OnDisabled(const std::string& id)
+@@ -688,6 +692,9 @@ void OnPostInstall(const AddonPtr& addon, bool update, bool modal)
+   if (CAddonMgr::GetInstance().GetAddon(addon->ID(), localAddon, ADDON_CONTEXT_ITEM))
+     CContextMenuManager::GetInstance().Register(std::static_pointer_cast<CContextMenuAddon>(localAddon));
+ 
++  if (CAddonMgr::GetInstance().GetAddon(addon->ID(), localAddon, ADDON_REPOSITORY))
++    CRepositoryUpdater::GetInstance().ScheduleUpdate(); //notify updater there is a new addon/version
++
+   addon->OnPostInstall(update, modal);
+ }
+ 
+@@ -700,6 +707,13 @@ void OnPreUnInstall(const AddonPtr& addon)
+   if (CAddonMgr::GetInstance().GetAddon(addon->ID(), localAddon, ADDON_CONTEXT_ITEM))
+     CContextMenuManager::GetInstance().Unregister(std::static_pointer_cast<CContextMenuAddon>(localAddon));
+ 
++  if (CAddonMgr::GetInstance().GetAddon(addon->ID(), localAddon, ADDON_REPOSITORY))
++  {
++    CAddonDatabase database;
++    database.Open();
++    database.DeleteRepository(addon->ID());
++  }
++
+   addon->OnPreUnInstall();
+ }
+ 
+diff --git a/xbmc/addons/Repository.cpp b/xbmc/addons/Repository.cpp
+index 0795c1a..6f99064 100644
+--- a/xbmc/addons/Repository.cpp
++++ b/xbmc/addons/Repository.cpp
+@@ -198,20 +198,6 @@ bool CRepository::Parse(const DirInfo& dir, VECADDONS &result)
+   return false;
+ }
+ 
+-void CRepository::OnPostInstall(bool update, bool modal)
+-{
+-  if (!update)
+-    // Notify updater there is a new repo
+-    CRepositoryUpdater::GetInstance().ScheduleUpdate();
+-}
+-
+-void CRepository::OnPostUnInstall()
+-{
+-  CAddonDatabase database;
+-  database.Open();
+-  database.DeleteRepository(ID());
+-}
+-
+ CRepositoryUpdateJob::CRepositoryUpdateJob(const RepositoryPtr& repo) : m_repo(repo) {}
+ 
+ void MergeAddons(map<string, AddonPtr> &addons, const VECADDONS &new_addons)
+diff --git a/xbmc/addons/Repository.h b/xbmc/addons/Repository.h
+index 31a5fb0..29ea848 100644
+--- a/xbmc/addons/Repository.h
++++ b/xbmc/addons/Repository.h
+@@ -57,9 +57,6 @@ namespace ADDON
+     static bool Parse(const DirInfo& dir, VECADDONS& addons);
+     static std::string FetchChecksum(const std::string& url);
+ 
+-    virtual void OnPostInstall(bool update, bool modal);
+-    virtual void OnPostUnInstall();
+-
+   private:
+     CRepository(const CRepository &rhs);
+   };
+
+From ac93186dac3f55ef873c5ebc5b9ec864d2231429 Mon Sep 17 00:00:00 2001
+From: Thomas Amland <thomas.amland@gmail.com>
+Date: Fri, 21 Aug 2015 20:36:53 +0200
+Subject: [PATCH 4/4] [addons] improve error handling in repository navigation
+
+remove unnecessary waiting for updates to complete.
+properly ask for an update when repository data is invalid/never
+fetched, and show info dialog instead of silently failing
+---
+ .../resource.language.en_gb/resources/strings.po   |  7 ++++-
+ xbmc/addons/AddonDatabase.cpp                      | 33 +++++++---------------
+ xbmc/addons/AddonDatabase.h                        |  1 -
+ xbmc/filesystem/AddonsDirectory.cpp                | 15 +++++++---
+ 4 files changed, 27 insertions(+), 29 deletions(-)
+
+diff --git a/addons/resource.language.en_gb/resources/strings.po b/addons/resource.language.en_gb/resources/strings.po
+index edace30..c349c18 100644
+--- a/addons/resource.language.en_gb/resources/strings.po
++++ b/addons/resource.language.en_gb/resources/strings.po
+@@ -13851,7 +13851,12 @@ msgctxt "#24147"
+ msgid "Failed to scan %s: %s"
+ msgstr ""
+ 
+-#empty strings from id 24148 to 24991
++#empty strings from id 24148 to 24990
++
++#: xbmc/filesystem/AddonsDirectory.cpp
++msgctxt "#24991"
++msgid "Could not connect to repository."
++msgstr ""
+ 
+ #: xbmc/addons/CGUIViewStateAddonBrowser.cpp
+ #: xbmc/filesystem/AddonsDirectory.cpp
+diff --git a/xbmc/addons/AddonDatabase.cpp b/xbmc/addons/AddonDatabase.cpp
+index 9f7acc7..11861ee 100644
+--- a/xbmc/addons/AddonDatabase.cpp
++++ b/xbmc/addons/AddonDatabase.cpp
+@@ -511,19 +511,25 @@ bool CAddonDatabase::SetLastChecked(const std::string& id,
+   return false;
+ }
+ 
+-bool CAddonDatabase::GetRepository(int id, VECADDONS& addons)
++bool CAddonDatabase::GetRepository(const std::string& id, VECADDONS& addons)
+ {
+   try
+   {
+     if (NULL == m_pDB.get()) return false;
+     if (NULL == m_pDS.get()) return false;
+ 
+-    std::string strSQL = PrepareSQL("select * from addonlinkrepo where idRepo=%i",id);
+-    m_pDS->query(strSQL.c_str());
++    std::string query = PrepareSQL("select id from repo where addonID='%s'"
++        " AND checksum != '' and lastcheck != ''", id.c_str());
++    m_pDS->query(query.c_str());
++    if (m_pDS->eof())
++      return false;
++
++    query = PrepareSQL("select * from addonlinkrepo where idRepo=%i", m_pDS->fv(0).get_asInt());
++    m_pDS->query(query.c_str());
+     while (!m_pDS->eof())
+     {
+       AddonPtr addon;
+-      if (GetAddon(m_pDS->fv("idAddon").get_asInt(),addon))
++      if (GetAddon(m_pDS->fv("idAddon").get_asInt(), addon))
+         addons.push_back(addon);
+       m_pDS->next();
+     }
+@@ -531,25 +537,6 @@ bool CAddonDatabase::GetRepository(int id, VECADDONS& addons)
+   }
+   catch (...)
+   {
+-    CLog::Log(LOGERROR, "%s failed on repo %i", __FUNCTION__, id);
+-  }
+-  return false;
+-}
+-
+-bool CAddonDatabase::GetRepository(const std::string& id, VECADDONS& addons)
+-{
+-  try
+-  {
+-    if (NULL == m_pDB.get()) return false;
+-    if (NULL == m_pDS.get()) return false;
+-
+-    std::string strSQL = PrepareSQL("select id from repo where addonID='%s'",id.c_str());
+-    m_pDS->query(strSQL.c_str());
+-    if (!m_pDS->eof())
+-      return GetRepository(m_pDS->fv(0).get_asInt(),addons);
+-  }
+-  catch (...)
+-  {
+     CLog::Log(LOGERROR, "%s failed on repo %s", __FUNCTION__, id.c_str());
+   }
+   return false;
+diff --git a/xbmc/addons/AddonDatabase.h b/xbmc/addons/AddonDatabase.h
+index ac08650..53bf7e1 100644
+--- a/xbmc/addons/AddonDatabase.h
++++ b/xbmc/addons/AddonDatabase.h
+@@ -53,7 +53,6 @@ class CAddonDatabase : public CDatabase
+   void DeleteRepository(int id);
+   int GetRepoChecksum(const std::string& id, std::string& checksum);
+   bool GetRepository(const std::string& id, ADDON::VECADDONS& addons);
+-  bool GetRepository(int id, ADDON::VECADDONS& addons);
+   bool SetLastChecked(const std::string& id, const ADDON::AddonVersion& version, const std::string& timestamp);
+ 
+   /*!
+diff --git a/xbmc/filesystem/AddonsDirectory.cpp b/xbmc/filesystem/AddonsDirectory.cpp
+index 045bef2..0262d13 100644
+--- a/xbmc/filesystem/AddonsDirectory.cpp
++++ b/xbmc/filesystem/AddonsDirectory.cpp
+@@ -333,7 +333,6 @@ static bool HaveOrphaned()
+ static void OutdatedAddons(const CURL& path, CFileItemList &items)
+ {
+   VECADDONS addons;
+-  CRepositoryUpdater::GetInstance().Await();
+   CAddonMgr::GetInstance().GetAllOutdatedAddons(addons);
+   CAddonsDirectory::GenerateAddonListing(path, addons, items, g_localizeStrings.Get(24043));
+ 
+@@ -375,12 +374,20 @@ static bool Browse(const CURL& path, CFileItemList &items)
+     if (!CAddonMgr::GetInstance().GetAddon(repo, addon, ADDON_REPOSITORY))
+       return false;
+ 
+-    CRepositoryUpdater::GetInstance().Await();
+-
+     CAddonDatabase database;
+     database.Open();
+     if (!database.GetRepository(addon->ID(), addons))
+-      return false;
++    {
++      //Repo content is invalid. Ask for update and wait.
++      CRepositoryUpdater::GetInstance().CheckForUpdates(std::static_pointer_cast<CRepository>(addon));
++      CRepositoryUpdater::GetInstance().Await();
++
++      if (!database.GetRepository(addon->ID(), addons))
++      {
++        CGUIDialogOK::ShowAndGetInput(CVariant{addon->Name()}, CVariant{24991});
++        return false;
++      }
++    }
+ 
+     items.SetProperty("reponame", addon->Name());
+     items.SetLabel(addon->Name());

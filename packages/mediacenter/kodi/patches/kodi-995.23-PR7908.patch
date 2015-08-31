@@ -1,0 +1,56 @@
+From e2eec430dc0a1b359ca92b9be3626adb7fcf3504 Mon Sep 17 00:00:00 2001
+From: Stefan Saraev <stefan@saraev.ca>
+Date: Thu, 27 Aug 2015 21:34:51 +0300
+Subject: [PATCH] [cleanup] dont search for ogg/vorbis/vorbisenc shared libs
+
+.. and leftovers
+---
+ configure.ac                         | 3 ---
+ xbmc/DllPaths_generated_android.h.in | 4 ----
+ xbmc/DllPaths_win32.h                | 4 ----
+ 3 files changed, 11 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index df87c0c..93e93a4 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1336,9 +1336,6 @@ fi
+   fi
+ fi
+ 
+-XB_FIND_SONAME([OGG],         [ogg])
+-XB_FIND_SONAME([VORBIS],      [vorbis])
+-XB_FIND_SONAME([VORBISFILE],  [vorbisfile])
+ XB_FIND_SONAME([ASS],         [ass])
+ XB_FIND_SONAME([MPEG2],       [mpeg2])
+ 
+diff --git a/xbmc/DllPaths_generated_android.h.in b/xbmc/DllPaths_generated_android.h.in
+index ffe9f61..8e5b549 100644
+--- a/xbmc/DllPaths_generated_android.h.in
++++ b/xbmc/DllPaths_generated_android.h.in
+@@ -48,10 +48,6 @@
+ #define DLL_PATH_LIBMPEG2      "@MPEG2_SONAME@"
+ #define DLL_PATH_LIBSTAGEFRIGHTICS    "libXBMCvcodec_stagefrightICS-@ARCH@.so"
+ 
+-/* cdrip */
+-#define DLL_PATH_OGG           "@OGG_SONAME@"
+-#define DLL_PATH_VORBIS        "@VORBIS_SONAME@"
+-
+ /* libbluray */
+ #define DLL_PATH_LIBBLURAY     "@BLURAY_SONAME@"
+ 
+diff --git a/xbmc/DllPaths_win32.h b/xbmc/DllPaths_win32.h
+index aa4d199..991336e 100644
+--- a/xbmc/DllPaths_win32.h
++++ b/xbmc/DllPaths_win32.h
+@@ -37,10 +37,6 @@
+ #define DLL_PATH_LIBDVDNAV     "special://xbmcbin/system/players/dvdplayer/libdvdnav.dll"
+ #define DLL_PATH_LIBRTMP       "special://xbmcbin/system/players/dvdplayer/librtmp.dll"
+ 
+-/* cdrip */
+-#define DLL_PATH_OGG           "special://xbmcbin/system/cdrip/ogg.dll"
+-#define DLL_PATH_VORBIS        "special://xbmcbin/system/cdrip/vorbis.dll"
+-
+ /* libbluray */
+ #define DLL_PATH_LIBBLURAY     "special://xbmcbin/system/players/dvdplayer/libbluray.dll"
+ 

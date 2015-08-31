@@ -1,0 +1,375 @@
+From 2ac99887135509a31cc578c1110eb3e4a808c0b7 Mon Sep 17 00:00:00 2001
+From: popcornmix <popcornmix@gmail.com>
+Date: Mon, 23 Mar 2015 17:12:31 +0000
+Subject: [PATCH] [ffmpeg] Add support for libdcadec
+
+---
+ Makefile.in                                        |  2 +-
+ .../resource.language.en_gb/resources/strings.po   | 10 ++++++
+ configure.ac                                       |  4 +++
+ docs/README.linux                                  |  2 +-
+ docs/README.ubuntu                                 |  2 +-
+ system/settings/settings.xml                       | 16 +++++++++
+ tools/darwin/Configurations/App.xcconfig.in        |  2 +-
+ tools/depends/target/Makefile                      |  4 +--
+ tools/depends/target/ffmpeg/Makefile               |  1 +
+ tools/depends/target/ffmpeg/autobuild.sh           |  1 +
+ tools/depends/target/libdcadec/Makefile            | 40 ++++++++++++++++++++++
+ .../target/libdcadec/libdcadec_android.patch       | 13 +++++++
+ .../DVDCodecs/Audio/DVDAudioCodecFFmpeg.cpp        | 11 ++++--
+ .../cores/dvdplayer/DVDDemuxers/DVDDemuxFFmpeg.cpp | 13 +++++++
+ xbmc/cores/omxplayer/OMXAudioCodecOMX.cpp          | 10 ++++--
+ xbmc/settings/Settings.cpp                         |  1 +
+ xbmc/settings/Settings.h                           |  1 +
+ 17 files changed, 122 insertions(+), 11 deletions(-)
+ create mode 100644 tools/depends/target/libdcadec/Makefile
+ create mode 100644 tools/depends/target/libdcadec/libdcadec_android.patch
+
+diff --git a/Makefile.in b/Makefile.in
+index c97a847..6b4f2dd 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -446,7 +446,7 @@ FFMPEGOBJS = @FFMPEG_LIBDIR@/libavcodec.a \
+              @FFMPEG_LIBDIR@/libpostproc.a \
+              @FFMPEG_LIBDIR@/libswscale.a
+ DYNOBJSXBMC+= $(FFMPEGOBJS)
+-LIBS+= @GNUTLS_ALL_LIBS@ @VORBISENC_ALL_LIBS@
++LIBS+= @GNUTLS_ALL_LIBS@ @VORBISENC_ALL_LIBS@ @DCADEC_ALL_LIBS@
+ 
+ $(FFMPEGOBJS): dvdpcodecs
+ endif
+diff --git a/addons/resource.language.en_gb/resources/strings.po b/addons/resource.language.en_gb/resources/strings.po
+index 12b34b2..8f893b5 100644
+--- a/addons/resource.language.en_gb/resources/strings.po
++++ b/addons/resource.language.en_gb/resources/strings.po
+@@ -17503,3 +17503,13 @@ msgstr ""
+ msgctxt "#38016"
+ msgid "%d fps"
+ msgstr ""
++
++#: system/settings/settings.xml
++msgctxt "#38120"
++msgid "Support 8 channel DTS-HD audio decoding"
++msgstr ""
++
++#: system/settings/settings.xml
++msgctxt "#38121"
++msgid "Enables decoding of high quality DTS-HD audio streams. Note: This increases CPU load and is only available when DTS and DTS-HD audio passthrough are disabled."
++msgstr ""
+diff --git a/configure.ac b/configure.ac
+index df87c0c..206d7ba 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -1108,6 +1108,7 @@ AC_CHECK_HEADER([mpeg2dec/mpeg2convert.h],, AC_MSG_ERROR($missing_library),
+ AC_CHECK_HEADER([jpeglib.h],,        AC_MSG_ERROR($missing_library))
+ AC_CHECK_HEADER([ogg/ogg.h],,        AC_MSG_ERROR($missing_library))
+ AC_CHECK_HEADER([vorbis/vorbisfile.h],, AC_MSG_ERROR($missing_library))
++PKG_CHECK_MODULES([LIBDCADEC], [dcadec],, AC_MSG_ERROR([libdcadec not found]))
+ 
+ PKG_CHECK_MODULES([LIBCURL], [libcurl],, AC_MSG_ERROR([libcurl not found]))
+ XB_FIND_SONAME([CURL], [curl])
+@@ -1139,6 +1140,7 @@ PKG_CHECK_MODULES([GNUTLS], [gnutls], [have_gnutls=yes];AC_DEFINE([HAVE_GNUTLS],
+ AC_CHECK_LIB([bz2],         [main],, AC_MSG_ERROR($missing_library))
+ AC_CHECK_LIB([jpeg],        [main],, AC_MSG_ERROR($missing_library)) # check for cximage
+ AC_CHECK_LIB([tiff],        [main],, AC_MSG_ERROR($missing_library))
++AC_CHECK_LIB([dcadec],      [main],, AC_MSG_ERROR($missing_library))
+ if echo "$ARCH" | grep -q freebsd; then
+ AC_CHECK_LIB([pthread],     [main],LIBS="-pthread $LIBS", AC_MSG_ERROR($missing_library))
+ AC_CHECK_LIB([pthread],     [pthread_set_name_np],
+@@ -1817,6 +1819,7 @@ if test "${USE_STATIC_FFMPEG}" = "1"; then
+   FFMPEG_LIBDIR=${pkg_cfg_prefix}$(PKG_CONFIG_SYSROOT_DIR="" ${PKG_CONFIG} --static --variable=libdir libavcodec)
+   GNUTLS_ALL_LIBS=$(${PKG_CONFIG} --static --libs-only-l --silence-errors gnutls)
+   VORBISENC_ALL_LIBS=$(${PKG_CONFIG} --static --libs-only-l --silence-errors vorbisenc)
++  DCADEC_ALL_LIBS=$(${PKG_CONFIG} --static --libs-only-l --silence-errors dcadec)
+ 
+   # check if static libs are available
+   for ff_lib in ${ff_libs}; do
+@@ -2633,6 +2636,7 @@ AC_SUBST(FFMPEG_LIBDIR)
+ AC_SUBST(USE_STATIC_FFMPEG)
+ AC_SUBST(GNUTLS_ALL_LIBS)
+ AC_SUBST(VORBISENC_ALL_LIBS)
++AC_SUBST(DCADEC_ALL_LIBS)
+ AC_SUBST(USE_TOUCH_SKIN)
+ AC_SUBST(USE_LIBAV_HACKS)
+ AC_SUBST(PYTHON_VERSION)
+diff --git a/docs/README.linux b/docs/README.linux
+index 8605fb4..2aff70e 100644
+--- a/docs/README.linux
++++ b/docs/README.linux
+@@ -44,7 +44,7 @@ that are used to build Kodi packages on Debian/Ubuntu (with all supported
+ external libraries enabled).
+ 
+ Build-Depends: autoconf, automake, autopoint, autotools-dev, cmake, curl,
+-  debhelper (>= 7.0.50~), default-jre, gawk, gperf, libao-dev, libasound2-dev,
++  dcadec-dev, default-jre, gawk, gperf, libao-dev, libasound2-dev,
+   libass-dev (>= 0.9.8), libavahi-client-dev, libavahi-common-dev, libbluetooth-dev,
+   libbluray-dev, libboost-dev, libboost-thread-dev, libbz2-dev, libcap-dev, libcdio-dev,
+   libcec-dev, libcurl4-openssl-dev | libcurl4-gnutls-dev | libcurl-dev, libcwiid-dev,
+diff --git a/docs/README.ubuntu b/docs/README.ubuntu
+index 9a30649..848e378 100644
+--- a/docs/README.ubuntu
++++ b/docs/README.ubuntu
+@@ -81,7 +81,7 @@ Tip: For those with multiple computers at home is to try out distcc
+ -----------------------------------------------------------------------------
+ 
+ For Ubuntu (all versions >= 7.04):
+-    $ sudo apt-get install automake bison build-essential cmake curl cvs default-jre fp-compiler gawk gdc gettext git-core gperf libasound2-dev libass-dev libboost-dev libboost-thread-dev libbz2-dev libcap-dev libcdio-dev libcurl3 libcurl4-openssl-dev libdbus-1-dev libfontconfig-dev libfreetype6-dev libfribidi-dev libgif-dev libglew-dev libiso9660-dev libjasper-dev libjpeg-dev liblzo2-dev libmicrohttpd-dev libmodplug-dev libmpeg2-4-dev libmpeg3-dev libmysqlclient-dev libnfs-dev libogg-dev libpcre3-dev libplist-dev libpng-dev libpulse-dev libsdl2-dev libsmbclient-dev libsqlite3-dev libssh-dev libssl-dev libtiff-dev libtinyxml-dev libtool libudev-dev libusb-dev libva-dev libvdpau-dev libvorbis-dev libvorbisenc2 libxml2-dev libxmu-dev libxrandr-dev libxrender-dev libxslt1-dev libxt-dev libyajl-dev mesa-utils nasm pmount python-dev python-imaging python-sqlite swig unzip uuid-dev yasm zip zlib1g-dev
++    $ sudo apt-get install automake bison build-essential cmake curl cvs dcadec-dev default-jre fp-compiler gawk gdc gettext git-core gperf libasound2-dev libass-dev libboost-dev libboost-thread-dev libbz2-dev libcap-dev libcdio-dev libcurl3 libcurl4-openssl-dev libdbus-1-dev libfontconfig-dev libfreetype6-dev libfribidi-dev libgif-dev libglew-dev libiso9660-dev libjasper-dev libjpeg-dev liblzo2-dev libmicrohttpd-dev libmodplug-dev libmpeg2-4-dev libmpeg3-dev libmysqlclient-dev libnfs-dev libogg-dev libpcre3-dev libplist-dev libpng-dev libpulse-dev libsdl2-dev libsmbclient-dev libsqlite3-dev libssh-dev libssl-dev libtiff-dev libtinyxml-dev libtool libudev-dev libusb-dev libva-dev libvdpau-dev libvorbis-dev libvorbisenc2 libxml2-dev libxmu-dev libxrandr-dev libxrender-dev libxslt1-dev libxt-dev libyajl-dev mesa-utils nasm pmount python-dev python-imaging python-sqlite swig unzip uuid-dev yasm zip zlib1g-dev
+ 
+ For >= 10.10:
+     $ sudo apt-get install autopoint libltdl-dev
+diff --git a/system/settings/settings.xml b/system/settings/settings.xml
+index c5b137a..dfa40af 100644
+--- a/system/settings/settings.xml
++++ b/system/settings/settings.xml
+@@ -2615,6 +2615,22 @@
+           </constraints>
+           <control type="list" format="string" />
+         </setting>
++        <setting id="audiooutput.supportdtshdcpudecoding" type="boolean" label="38120" help="38121">
++          <level>2</level>
++          <default>false</default>
++          <control type="toggle" />
++          <dependencies>
++            <dependency type="enable">
++            <or>
++              <condition setting="audiooutput.passthrough" operator="is">false</condition>
++              <and>
++                <condition setting="audiooutput.dtshdpassthrough" operator="is">false</condition>
++                <condition setting="audiooutput.dtspassthrough" operator="is">false</condition>
++              </and>
++            </or>
++            </dependency>
++          </dependencies>
++        </setting>
+       </group>
+       <group id="2">
+         <setting id="audiooutput.dspaddonsenabled" type="boolean" label="36441" help="36438">
+diff --git a/tools/darwin/Configurations/App.xcconfig.in b/tools/darwin/Configurations/App.xcconfig.in
+index 9d92607..1a1a2c0 100644
+--- a/tools/darwin/Configurations/App.xcconfig.in
++++ b/tools/darwin/Configurations/App.xcconfig.in
+@@ -25,7 +25,7 @@ HEADER_SEARCH_PATHS = $(inherited) $SRCROOT xbmc xbmc/linux xbmc/osx xbmc/cores/
+ LIBRARY_SEARCH_PATHS = $(inherited) $(SRCROOT) $(SRCROOT)/xbmc/interfaces/json-rpc "$(SRCROOT)/xbmc/interfaces/python" "$(SRCROOT)/xbmc/interfaces/legacy"
+ FRAMEWORK_SEARCH_PATHS = $(inherited) "$(SDKROOT)/System/Library/PrivateFrameworks/" "$(SDKROOT)/System/Library/Frameworks/"
+ 
+-XBMC_OTHER_LDFLAGS_COMMON = $(inherited) -Wl,-headerpad_max_install_names -Wl,-all_load -L$XBMC_DEPENDS/lib -lbz2 -lintl -lexpat -lssl -lgpg-error -lresolv -lffi -lssh -llzo2 -lpcre -lpcrecpp -lfribidi -lfreetype -lfontconfig -lsqlite3 -ltinyxml -lmicrohttpd -lsmbclient -lpython2.6 -lyajl -ljpeg -lcrypto -lgcrypt -lavdevice -lavfilter -lavcodec -lavformat -lpostproc -lavutil -lswresample -lswscale -ltag -L$XBMC_DEPENDS/lib/mysql -lmysqlclient -lxml2 -lxslt -lnettle -lgmp -lhogweed -lgnutls -lsquish -lcrossguid
++XBMC_OTHER_LDFLAGS_COMMON = $(inherited) -Wl,-headerpad_max_install_names -Wl,-all_load -L$XBMC_DEPENDS/lib -lbz2 -lintl -lexpat -lssl -lgpg-error -lresolv -lffi -lssh -llzo2 -lpcre -lpcrecpp -lfribidi -lfreetype -lfontconfig -lsqlite3 -ltinyxml -lmicrohttpd -lsmbclient -lpython2.6 -lyajl -ljpeg -lcrypto -lgcrypt -lavdevice -lavfilter -lavcodec -lavformat -lpostproc -lavutil -ldcadec -lswresample -lswscale -ltag -L$XBMC_DEPENDS/lib/mysql -lmysqlclient -lxml2 -lxslt -lnettle -lgmp -lhogweed -lgnutls -lsquish -lcrossguid
+ 
+ CLANG_CXX_LANGUAGE_STANDARD = c++0x
+ CLANG_CXX_LIBRARY = libc++
+diff --git a/tools/depends/target/Makefile b/tools/depends/target/Makefile
+index 14ef4e9..0cb0c0c 100644
+--- a/tools/depends/target/Makefile
++++ b/tools/depends/target/Makefile
+@@ -15,9 +15,9 @@ DEPENDS = \
+ 	python26 libshairplay \
+ 	libplist libcec libbluray boost tinyxml dummy-libxbmc \
+ 	libamplayer libssh taglib libusb libnfs libmp3lame \
+-	pythonmodule-pil libxslt ffmpeg platform crossguid
++	pythonmodule-pil libxslt ffmpeg platform crossguid libdcadec
+ 
+-FFMPEG_DEPENDS = gnutls
++FFMPEG_DEPENDS = gnutls libdcadec
+ 
+ ifeq ($(ENABLE_GPLV3),yes)
+   DEPENDS+=samba-gplv3 libcdio-gplv3
+diff --git a/tools/depends/target/ffmpeg/Makefile b/tools/depends/target/ffmpeg/Makefile
+index 18479f3..b8502ae 100644
+--- a/tools/depends/target/ffmpeg/Makefile
++++ b/tools/depends/target/ffmpeg/Makefile
+@@ -19,6 +19,7 @@ ffmpg_config += --enable-muxer=asf --enable-muxer=ipod
+ ffmpg_config += --enable-encoder=ac3 --enable-encoder=aac
+ ffmpg_config += --enable-encoder=wmav2 --enable-protocol=http
+ ffmpg_config += --enable-gnutls
++ffmpg_config += --enable-libdcadec
+ 
+ ifeq ($(CROSS_COMPILING), yes)
+   ffmpg_config += --arch=$(CPU) --enable-cross-compile
+diff --git a/tools/depends/target/ffmpeg/autobuild.sh b/tools/depends/target/ffmpeg/autobuild.sh
+index 196c347..b9bfd57 100755
+--- a/tools/depends/target/ffmpeg/autobuild.sh
++++ b/tools/depends/target/ffmpeg/autobuild.sh
+@@ -159,6 +159,7 @@ CFLAGS="$CFLAGS" CXXFLAGS="$CXXFLAGS" LDFLAGS="$LDFLAGS" \
+ 	--disable-mips32r2 \
+ 	--disable-mipsdspr1 \
+ 	--disable-mipsdspr2 \
++	--enable-libdcadec \
+         ${FLAGS}
+ 
+ make -j ${BUILDTHREADS} 
+diff --git a/tools/depends/target/libdcadec/Makefile b/tools/depends/target/libdcadec/Makefile
+new file mode 100644
+index 0000000..73042c6
+--- /dev/null
++++ b/tools/depends/target/libdcadec/Makefile
+@@ -0,0 +1,40 @@
++include ../../Makefile.include
++DEPS= ../../Makefile.include Makefile libdcadec_android.patch
++
++# lib name, version
++LIBNAME=libdcadec
++VERSION=git-2a9186e3
++SOURCE=$(LIBNAME)-$(VERSION)
++ARCHIVE=$(SOURCE).tar.gz
++
++# configuration settings
++
++LIBDYLIB=$(PLATFORM)/.libs/$(LIBNAME).a
++
++CFLAGS += -std=gnu99
++
++all: $(LIBDYLIB) .installed-$(PLATFORM)
++
++$(TARBALLS_LOCATION)/$(ARCHIVE):
++	cd $(TARBALLS_LOCATION); $(RETRIEVE_TOOL) $(RETRIEVE_TOOL_FLAGS) $(BASE_URL)/$(ARCHIVE)
++
++$(PLATFORM): $(TARBALLS_LOCATION)/$(ARCHIVE) $(DEPS)
++	rm -rf $(PLATFORM)/*; mkdir -p $(PLATFORM)
++	cd $(PLATFORM); $(ARCHIVE_TOOL) $(ARCHIVE_TOOL_FLAGS) $(TARBALLS_LOCATION)/$(ARCHIVE)
++ifeq ($(OS),android)
++	cd $(PLATFORM); patch -p1 < ../libdcadec_android.patch
++endif
++
++$(LIBDYLIB): $(PLATFORM)
++	$(MAKE) -C $(PLATFORM) PREFIX=$(PREFIX) CC="$(CC)" CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS)" AR="$(AR)"
++
++.installed-$(PLATFORM): $(LIBDYLIB)
++	$(MAKE) -C $(PLATFORM) PREFIX=$(PREFIX) CC="$(CC)" CFLAGS="$(CFLAGS)" LDFLAGS="$(LDFLAGS)" AR="$(AR)" install
++	touch $@
++
++clean:
++	$(MAKE) -C $(PLATFORM) clean
++	rm -f .installed-$(PLATFORM)
++
++distclean::
++	rm -rf $(PLATFORM) .installed-$(PLATFORM)
+diff --git a/tools/depends/target/libdcadec/libdcadec_android.patch b/tools/depends/target/libdcadec/libdcadec_android.patch
+new file mode 100644
+index 0000000..6de9f35
+--- /dev/null
++++ b/tools/depends/target/libdcadec/libdcadec_android.patch
+@@ -0,0 +1,13 @@
++diff --git a/libdcadec/dca_stream.c b/libdcadec/dca_stream.c
++index 156f874..acbd139 100644
++--- a/libdcadec/dca_stream.c
+++++ b/libdcadec/dca_stream.c
++@@ -37,7 +37,7 @@
++ #if (defined _WIN32)
++ #define DCA_FGETC   _fgetc_nolock
++ #elif (defined _BSD_SOURCE)
++-#define DCA_FGETC   fgetc_unlocked
+++#define DCA_FGETC   fgetc
++ #else
++ #define DCA_FGETC   fgetc
++ #endif
+diff --git a/xbmc/cores/dvdplayer/DVDCodecs/Audio/DVDAudioCodecFFmpeg.cpp b/xbmc/cores/dvdplayer/DVDCodecs/Audio/DVDAudioCodecFFmpeg.cpp
+index ec8c87b..6a417aa 100644
+--- a/xbmc/cores/dvdplayer/DVDCodecs/Audio/DVDAudioCodecFFmpeg.cpp
++++ b/xbmc/cores/dvdplayer/DVDCodecs/Audio/DVDAudioCodecFFmpeg.cpp
+@@ -29,8 +29,8 @@ extern "C" {
+ #include "libavutil/opt.h"
+ }
+ 
+-#if defined(TARGET_DARWIN)
+ #include "settings/Settings.h"
++#if defined(TARGET_DARWIN)
+ #include "cores/AudioEngine/Utils/AEUtil.h"
+ #endif
+ 
+@@ -54,10 +54,15 @@ CDVDAudioCodecFFmpeg::~CDVDAudioCodecFFmpeg()
+ 
+ bool CDVDAudioCodecFFmpeg::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options)
+ {
+-  AVCodec* pCodec;
++  AVCodec* pCodec = NULL;
+   m_bOpenedCodec = false;
+ 
+-  pCodec = avcodec_find_decoder(hints.codec);
++  if (hints.codec == AV_CODEC_ID_DTS && CSettings::GetInstance().GetBool(CSettings::SETTING_AUDIOOUTPUT_SUPPORTSDTSHDCPUDECODING))
++    pCodec = avcodec_find_decoder_by_name("libdcadec");
++
++  if (!pCodec)
++    pCodec = avcodec_find_decoder(hints.codec);
++
+   if (!pCodec)
+   {
+     CLog::Log(LOGDEBUG,"CDVDAudioCodecFFmpeg::Open() Unable to find codec %d", hints.codec);
+diff --git a/xbmc/cores/dvdplayer/DVDDemuxers/DVDDemuxFFmpeg.cpp b/xbmc/cores/dvdplayer/DVDDemuxers/DVDDemuxFFmpeg.cpp
+index 27f09e8..253ef03 100644
+--- a/xbmc/cores/dvdplayer/DVDDemuxers/DVDDemuxFFmpeg.cpp
++++ b/xbmc/cores/dvdplayer/DVDDemuxers/DVDDemuxFFmpeg.cpp
+@@ -439,6 +439,19 @@ bool CDVDDemuxFFmpeg::Open(CDVDInputStream* pInput, bool streaminfo, bool filein
+ 
+   if (m_streaminfo)
+   {
++    if (CSettings::GetInstance().GetBool(CSettings::SETTING_AUDIOOUTPUT_SUPPORTSDTSHDCPUDECODING))
++    {
++      for (unsigned int i = 0; i < m_pFormatContext->nb_streams; i++)
++      {
++        AVStream *st = m_pFormatContext->streams[i];
++        if (st->codec->codec_type == AVMEDIA_TYPE_AUDIO && st->codec->codec_id == AV_CODEC_ID_DTS)
++        {
++          AVCodec* pCodec = avcodec_find_decoder_by_name("libdcadec");
++          if (pCodec)
++            st->codec->codec = pCodec;
++        }
++      }
++    }
+     /* to speed up dvd switches, only analyse very short */
+     if(m_pInput->IsStreamType(DVDSTREAM_TYPE_DVD))
+       av_opt_set_int(m_pFormatContext, "analyzeduration", 500000, 0);
+diff --git a/xbmc/cores/omxplayer/OMXAudioCodecOMX.cpp b/xbmc/cores/omxplayer/OMXAudioCodecOMX.cpp
+index 1a920f7..33c4c6a 100644
+--- a/xbmc/cores/omxplayer/OMXAudioCodecOMX.cpp
++++ b/xbmc/cores/omxplayer/OMXAudioCodecOMX.cpp
+@@ -26,6 +26,7 @@
+ 
+ #include "cores/AudioEngine/Utils/AEUtil.h"
+ #include "cores/AudioEngine/AEFactory.h"
++#include "settings/Settings.h"
+ 
+ // the size of the audio_render output port buffers
+ #define AUDIO_DECODE_OUTPUT_BUFFER (32*1024)
+@@ -62,10 +63,15 @@ COMXAudioCodecOMX::~COMXAudioCodecOMX()
+ 
+ bool COMXAudioCodecOMX::Open(CDVDStreamInfo &hints)
+ {
+-  AVCodec* pCodec;
++  AVCodec* pCodec = NULL;
+   m_bOpenedCodec = false;
+ 
+-  pCodec = avcodec_find_decoder(hints.codec);
++  if (hints.codec == AV_CODEC_ID_DTS && CSettings::GetInstance().GetBool(CSettings::SETTING_AUDIOOUTPUT_SUPPORTSDTSHDCPUDECODING))
++    pCodec = avcodec_find_decoder_by_name("libdcadec");
++
++  if (!pCodec)
++    pCodec = avcodec_find_decoder(hints.codec);
++
+   if (!pCodec)
+   {
+     CLog::Log(LOGDEBUG,"COMXAudioCodecOMX::Open() Unable to find codec %d", hints.codec);
+diff --git a/xbmc/settings/Settings.cpp b/xbmc/settings/Settings.cpp
+index 68aa959..036a2d4 100644
+--- a/xbmc/settings/Settings.cpp
++++ b/xbmc/settings/Settings.cpp
+@@ -371,6 +371,7 @@ const std::string CSettings::SETTING_AUDIOOUTPUT_EAC3PASSTHROUGH = "audiooutput.
+ const std::string CSettings::SETTING_AUDIOOUTPUT_DTSPASSTHROUGH = "audiooutput.dtspassthrough";
+ const std::string CSettings::SETTING_AUDIOOUTPUT_TRUEHDPASSTHROUGH = "audiooutput.truehdpassthrough";
+ const std::string CSettings::SETTING_AUDIOOUTPUT_DTSHDPASSTHROUGH = "audiooutput.dtshdpassthrough";
++const std::string CSettings::SETTING_AUDIOOUTPUT_SUPPORTSDTSHDCPUDECODING = "audiooutput.supportdtshdcpudecoding";
+ const std::string CSettings::SETTING_INPUT_PERIPHERALS = "input.peripherals";
+ const std::string CSettings::SETTING_INPUT_ENABLEMOUSE = "input.enablemouse";
+ const std::string CSettings::SETTING_INPUT_ENABLEJOYSTICK = "input.enablejoystick";
+diff --git a/xbmc/settings/Settings.h b/xbmc/settings/Settings.h
+index 6b6a3ec..740c15f 100644
+--- a/xbmc/settings/Settings.h
++++ b/xbmc/settings/Settings.h
+@@ -329,6 +329,7 @@ class CSettings : public CSettingCreator, public CSettingControlCreator
+   static const std::string SETTING_AUDIOOUTPUT_DTSPASSTHROUGH;
+   static const std::string SETTING_AUDIOOUTPUT_TRUEHDPASSTHROUGH;
+   static const std::string SETTING_AUDIOOUTPUT_DTSHDPASSTHROUGH;
++  static const std::string SETTING_AUDIOOUTPUT_SUPPORTSDTSHDCPUDECODING;
+   static const std::string SETTING_INPUT_PERIPHERALS;
+   static const std::string SETTING_INPUT_ENABLEMOUSE;
+   static const std::string SETTING_INPUT_ENABLEJOYSTICK;

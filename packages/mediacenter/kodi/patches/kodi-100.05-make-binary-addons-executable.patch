@@ -1,7 +1,7 @@
-From fb58bfbb6a87666d35fde23ff08cf9a47071e188 Mon Sep 17 00:00:00 2001
+From ab9cec0666dc68fbb42f0678ae6466964550be6d Mon Sep 17 00:00:00 2001
 From: Stefan Saraev <stefan@saraev.ca>
 Date: Mon, 2 Mar 2015 23:50:40 +0200
-Subject: [PATCH 05/12] make binary addons executable
+Subject: [PATCH 05/13] make binary addons executable
 
 add executable mode to all files in addon's bin folder
 
@@ -11,10 +11,10 @@ credits to vpeter4 for the patch
  1 file changed, 26 insertions(+)
 
 diff --git a/xbmc/addons/Addon.cpp b/xbmc/addons/Addon.cpp
-index bf5c584..03325dd 100644
+index 366125e..377a49c 100644
 --- a/xbmc/addons/Addon.cpp
 +++ b/xbmc/addons/Addon.cpp
-@@ -44,6 +44,10 @@
+@@ -45,6 +45,10 @@
  #include <string.h>
  #include <ostream>
  
@@ -25,9 +25,9 @@ index bf5c584..03325dd 100644
  using XFILE::CDirectory;
  using XFILE::CFile;
  using namespace std;
-@@ -674,6 +678,28 @@ void OnPostInstall(const AddonPtr& addon, bool update, bool modal)
-   if (CAddonMgr::Get().GetAddon(addon->ID(), localAddon, ADDON_CONTEXT_ITEM))
-     CContextMenuManager::Get().Register(std::static_pointer_cast<CContextItemAddon>(localAddon));
+@@ -688,6 +692,28 @@ void OnPostInstall(const AddonPtr& addon, bool update, bool modal)
+   if (CAddonMgr::GetInstance().GetAddon(addon->ID(), localAddon, ADDON_CONTEXT_ITEM))
+     CContextMenuManager::GetInstance().Register(std::static_pointer_cast<CContextMenuAddon>(localAddon));
  
 +  // OE: make binary addons executable, creddits to vpeter4
 +  std::string addonDirPath;
@@ -55,5 +55,5 @@ index bf5c584..03325dd 100644
  }
  
 -- 
-2.1.4
+2.5.0
 
