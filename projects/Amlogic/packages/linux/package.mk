@@ -27,24 +27,10 @@ PKG_DEPENDS_INIT="toolchain"
 PKG_NEED_UNPACK="$LINUX_DEPENDS"
 PKG_PRIORITY="optional"
 PKG_SECTION="linux"
-PKG_SHORTDESC="linux26: The Linux kernel 2.6 precompiled kernel binary image and modules"
-PKG_LONGDESC="This package contains a precompiled kernel image and the modules."
-case "$LINUX" in
-  amlogic)
-    LINUX_VERSION="3.10-7224327"
-    PKG_VERSION="amlogic-$LINUX_VERSION"
-    PKG_URL="https://github.com/kszaq/linux-amlogic/releases/download/$LINUX_VERSION/$PKG_NAME-$PKG_VERSION.tar.xz"
-    ;;
-  imx6)
-    PKG_VERSION="cuboxi-3.14-ea83bda"
-    PKG_URL="$DISTRO_SRC/$PKG_NAME-$PKG_VERSION.tar.xz"
-    PKG_DEPENDS_TARGET="$PKG_DEPENDS_TARGET imx6-status-led imx6-soc-fan"
-    ;;
-  *)
-    PKG_VERSION="4.1.2"
-    PKG_URL="http://www.kernel.org/pub/linux/kernel/v4.x/$PKG_NAME-$PKG_VERSION.tar.xz"
-    ;;
-esac
+PKG_VERSION="3.10-89f8e1f"
+PKG_URL="https://github.com/RealJohnGalt/$PKG_NAME/releases/download/$PKG_VERSION/$PKG_NAME-$PKG_VERSION.tar.xz"
+PKG_SHORTDESC="The Linux kernel ${PKG_VERSION} precompiled kernel binary image and modules"
+PKG_LONGDESC="This package contains AMLogic Linux kernel source"
 
 PKG_IS_ADDON="no"
 PKG_AUTORECONF="no"
