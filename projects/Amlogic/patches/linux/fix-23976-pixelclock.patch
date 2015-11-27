@@ -1,0 +1,22 @@
+From f77346f36c6d2b8cf7bc6aadc95a28040471ac0c Mon Sep 17 00:00:00 2001
+From: Memphiz <memphis@machzwo.de>
+Date: Sun, 27 Sep 2015 22:19:14 +0200
+Subject: [PATCH] [aml] fix pixelclock for 23.976hz mode based on CEA-861B
+
+---
+ drivers/amlogic/display/vout/tvconf.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/amlogic/display/vout/tvconf.c b/drivers/amlogic/display/vout/tvconf.c
+index a987363..6e2da14 100755
+--- a/drivers/amlogic/display/vout/tvconf.c
++++ b/drivers/amlogic/display/vout/tvconf.c
+@@ -423,7 +423,7 @@ static const vinfo_t tv_info[] =
+ 		.aspect_ratio_den  = 9,
+ 		.sync_duration_num = 2397,
+ 		.sync_duration_den = 100,
+-		.video_clk		   = 74250000,
++		.video_clk		   = 74176000,//74250000,
+ 	},
+ #endif
+     { /* VMODE_4K2K_30HZ */
