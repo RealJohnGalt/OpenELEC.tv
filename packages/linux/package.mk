@@ -35,7 +35,7 @@ case "$LINUX" in
     PKG_URL="$DISTRO_SRC/$PKG_NAME-$PKG_VERSION.tar.xz"
     ;;
   amlogic-kszaq)
-    LINUX_VERSION="3.10-6f3b371"
+    LINUX_VERSION="3.10-1524879"
     PKG_VERSION="amlogic-$LINUX_VERSION"
     PKG_URL="https://github.com/kszaq/linux/releases/download/$LINUX_VERSION/$PKG_NAME-$PKG_VERSION.tar.xz"
     ;;
