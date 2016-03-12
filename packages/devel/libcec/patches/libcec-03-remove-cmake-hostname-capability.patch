@@ -1,0 +1,36 @@
+From 0a1948385f043fafe77fffe4d1c8297d10af00bc Mon Sep 17 00:00:00 2001
+From: John Galt <johngaltfirstrun@gmail.com>
+Date: Tue, 24 Nov 2015 05:11:33 -0800
+Subject: [PATCH] cmake: remove hostname capability
+
+This is bad and libcec developers should feel bad.
+
+If hostname binary is found, it attempts to run hostname -f (per
+SetBuildInfo.cmake L48). However, GNU coreutils hostname doesn't
+support -f, so this results in compilation errors on systems using
+GNU coreutils.
+---
+ src/libcec/cmake/SetBuildInfo.cmake | 7 -------
+ 1 file changed, 7 deletions(-)
+
+diff --git a/src/libcec/cmake/SetBuildInfo.cmake b/src/libcec/cmake/SetBuildInfo.cmake
+index 92c56dd..4b0d2bc 100644
+--- a/src/libcec/cmake/SetBuildInfo.cmake
++++ b/src/libcec/cmake/SetBuildInfo.cmake
+@@ -42,13 +42,6 @@ else()
+   endif()
+ 
+ 
+-  # add host on which this was built to compile info
+-  find_program(HAVE_HOSTNAME_BIN hostname /bin /usr/bin /usr/local/bin)
+-  if(HAVE_HOSTNAME_BIN)
+-    exec_program(hostname ARGS -f OUTPUT_VARIABLE BUILD_HOST)
+-    set(LIB_INFO "${LIB_INFO}@${BUILD_HOST}")
+-  endif()
+-
+   # add host info on which this was built to compile info
+   find_program(HAVE_UNAME_BIN uname /bin /usr/bin /usr/local/bin)
+   if(HAVE_UNAME_BIN)
+-- 
+2.6.3
+
