@@ -6,13 +6,13 @@ Subject: [PATCH 16/17] Disable deinterlacing for HD content while video is
  modes
 
 ---
- xbmc/cores/dvdplayer/DVDCodecs/Video/AMLCodec.cpp | 5 +++++
+ xbmc/cores/VideoPlayer/DVDCodecs/Video/AMLCodec.cpp | 5 +++++
  1 file changed, 5 insertions(+)
 
-diff --git a/xbmc/cores/dvdplayer/DVDCodecs/Video/AMLCodec.cpp b/xbmc/cores/dvdplayer/DVDCodecs/Video/AMLCodec.cpp
+diff --git a/xbmc/cores/VideoPlayer/DVDCodecs/Video/AMLCodec.cpp b/xbmc/cores/VideoPlayer/DVDCodecs/Video/AMLCodec.cpp
 index 2fad224..74804de 100644
---- a/xbmc/cores/dvdplayer/DVDCodecs/Video/AMLCodec.cpp
-+++ b/xbmc/cores/dvdplayer/DVDCodecs/Video/AMLCodec.cpp
+--- a/xbmc/cores/VideoPlayer/DVDCodecs/Video/AMLCodec.cpp
++++ b/xbmc/cores/VideoPlayer/DVDCodecs/Video/AMLCodec.cpp
 @@ -2261,6 +2261,11 @@ void CAMLCodec::SetVideoRect(const CRect &SrcRect, const CRect &DestRect)
    CLog::Log(LOGDEBUG, "CAMLCodec::SetVideoRect:m_stereo_view(%d)", m_stereo_view);
  #endif

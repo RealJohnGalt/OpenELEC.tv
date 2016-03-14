@@ -5,14 +5,14 @@ Subject: [PATCH 11/17] [aml] Use fpsrate and fpsscale instead of rfpsrate and
  rfpsscale to detect framerate
 
 ---
- xbmc/cores/dvdplayer/DVDCodecs/Video/AMLCodec.cpp  |   12 ++-----
+ xbmc/cores/VideoPlayer/DVDCodecs/Video/AMLCodec.cpp  |   12 ++-----
  .../DVDCodecs/Video/DVDVideoCodecAmlogic.cpp       |   38 +++++++++-----------
  2 files changed, 20 insertions(+), 30 deletions(-)
 
-diff --git a/xbmc/cores/dvdplayer/DVDCodecs/Video/AMLCodec.cpp b/xbmc/cores/dvdplayer/DVDCodecs/Video/AMLCodec.cpp
+diff --git a/xbmc/cores/VideoPlayer/DVDCodecs/Video/AMLCodec.cpp b/xbmc/cores/VideoPlayer/DVDCodecs/Video/AMLCodec.cpp
 index 26db4a1..fcdad19 100644
---- a/xbmc/cores/dvdplayer/DVDCodecs/Video/AMLCodec.cpp
-+++ b/xbmc/cores/dvdplayer/DVDCodecs/Video/AMLCodec.cpp
+--- a/xbmc/cores/VideoPlayer/DVDCodecs/Video/AMLCodec.cpp
++++ b/xbmc/cores/VideoPlayer/DVDCodecs/Video/AMLCodec.cpp
 @@ -1465,14 +1465,8 @@ bool CAMLCodec::OpenDecoder(CDVDStreamInfo &hints)
    am_private->video_ratio64    = ((int64_t)video_ratio.num << 32) | video_ratio.den;
  
@@ -40,10 +40,10 @@ index 26db4a1..fcdad19 100644
    CLog::Log(LOGDEBUG, "CAMLCodec::OpenDecoder hints.aspect(%f), video_ratio.num(%d), video_ratio.den(%d)",
      hints.aspect, video_ratio.num, video_ratio.den);
    CLog::Log(LOGDEBUG, "CAMLCodec::OpenDecoder hints.orientation(%d), hints.forced_aspect(%d), hints.extrasize(%d)",
-diff --git a/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecAmlogic.cpp b/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecAmlogic.cpp
+diff --git a/xbmc/cores/VideoPlayer/DVDCodecs/Video/DVDVideoCodecAmlogic.cpp b/xbmc/cores/VideoPlayer/DVDCodecs/Video/DVDVideoCodecAmlogic.cpp
 index 24c1ab9..960aae1 100644
---- a/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecAmlogic.cpp
-+++ b/xbmc/cores/dvdplayer/DVDCodecs/Video/DVDVideoCodecAmlogic.cpp
+--- a/xbmc/cores/VideoPlayer/DVDCodecs/Video/DVDVideoCodecAmlogic.cpp
++++ b/xbmc/cores/VideoPlayer/DVDCodecs/Video/DVDVideoCodecAmlogic.cpp
 @@ -74,9 +74,7 @@ bool CDVDVideoCodecAmlogic::Open(CDVDStreamInfo &hints, CDVDCodecOptions &option
        m_mpeg2_sequence->width  = m_hints.width;
        m_mpeg2_sequence->height = m_hints.height;
