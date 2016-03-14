@@ -4,13 +4,13 @@ Date: Fri, 19 Dec 2014 12:30:04 +0100
 Subject: [PATCH] FIX: [renderer] hide meaningless skips from users
 
 ---
- xbmc/cores/VideoRenderers/RenderManager.cpp | 3 ++-
+ xbmc/cores/VideoPlayer/VideoRenderers/RenderManager.cpp | 3 ++-
  1 file changed, 2 insertions(+), 1 deletion(-)
 
-diff --git a/xbmc/cores/VideoRenderers/RenderManager.cpp b/xbmc/cores/VideoRenderers/RenderManager.cpp
+diff --git a/xbmc/cores/VideoPlayer/VideoRenderers/RenderManager.cpp b/xbmc/cores/VideoPlayer/VideoRenderers/RenderManager.cpp
 index 7f43949..01327f5 100644
---- a/xbmc/cores/VideoRenderers/RenderManager.cpp
-+++ b/xbmc/cores/VideoRenderers/RenderManager.cpp
+--- a/xbmc/cores/VideoPlayer/VideoRenderers/RenderManager.cpp
++++ b/xbmc/cores/VideoPlayer/VideoRenderers/RenderManager.cpp
 @@ -1198,7 +1198,8 @@ void CXBMCRenderManager::PrepareNextRender()
      while(m_queued.front() != idx)
      {
