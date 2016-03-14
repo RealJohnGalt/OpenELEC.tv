@@ -17,12 +17,12 @@
 ################################################################################
 
 PKG_NAME="pvr.dvblink"
-PKG_VERSION="9741e69"
+PKG_VERSION="ff02fe1"
 PKG_REV="1"
 PKG_ARCH="any"
 PKG_LICENSE="GPL"
 PKG_SITE="http://www.kodi.tv"
-PKG_URL="$DISTRO_SRC/$PKG_NAME-$PKG_VERSION.tar.xz"
+PKG_URL="http://fritsch.fruehberger.net/sources/$PKG_NAME-$PKG_VERSION.tar.xz"
 PKG_DEPENDS_TARGET="toolchain kodi-platform tinyxml2"
 PKG_PRIORITY="optional"
 PKG_SECTION=""

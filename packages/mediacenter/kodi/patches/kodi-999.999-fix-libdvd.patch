@@ -1,0 +1,32 @@
+From 0495cf54b9f852d7ab2e38ab54db57c58032ea52 Mon Sep 17 00:00:00 2001
+From: fritsch <peter.fruehberger@gmail.com>
+Date: Sat, 12 Mar 2016 18:31:26 +0100
+Subject: [PATCH] squash
+
+---
+ Makefile.in | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/Makefile.in b/Makefile.in
+index 4b805e0..9a2b212 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -11,7 +11,6 @@ EC_DIRS= \
+ 
+ DVDPCODECS_DIRS= \
+ 	lib \
+-	lib/libdvd
+ 
+ VideoPlayer_ARCHIVES=xbmc/cores/VideoPlayer/VideoPlayer.a \
+                    xbmc/cores/VideoPlayer/DVDCodecs/DVDCodecs.a \
+@@ -339,7 +338,6 @@ libaddon: exports
+ 	$(MAKE) -C lib/addons/library.xbmc.pvr
+ 	$(MAKE) -C lib/addons/library.kodi.inputstream
+ dvdpcodecs: dllloader
+-	$(MAKE) -C lib/libdvd
+ 
+ dvdpextcodecs:
+ 
+-- 
+2.5.0
+

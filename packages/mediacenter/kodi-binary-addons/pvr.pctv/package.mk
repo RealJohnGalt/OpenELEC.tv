@@ -17,12 +17,12 @@
 ################################################################################
 
 PKG_NAME="pvr.pctv"
-PKG_VERSION="0096770"
+PKG_VERSION="f60f00a"
 PKG_REV="1"
 PKG_ARCH="any"
 PKG_LICENSE="GPL"
 PKG_SITE="http://www.kodi.tv"
-PKG_URL="$DISTRO_SRC/$PKG_NAME-$PKG_VERSION.tar.xz"
+PKG_URL="http://fritsch.fruehberger.net/sources/$PKG_NAME-$PKG_VERSION.tar.xz"
 PKG_DEPENDS_TARGET="toolchain kodi-platform jsoncpp"
 PKG_PRIORITY="optional"
 PKG_SECTION=""

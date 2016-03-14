@@ -109,6 +109,18 @@ if [ -f ../../packages/mediacenter/platform/package.mk ] ; then
   sed -i "s|PKG_VERSION=.*|PKG_VERSION=\"$RESOLVED_HASH\"|g" ../../packages/mediacenter/platform/package.mk
 fi
 
+# p8-platform
+REPO=$(cat $KODI_DIR/project/cmake/addons/depends/common/p8-platform/p8-platform.txt | awk '{print $2}')
+GIT_HASH=$(cat $KODI_DIR/project/cmake/addons/depends/common/p8-platform/p8-platform.txt | awk '{print $3}')
+
+copy_and_package $REPO platform $GIT_HASH
+
+if [ -f ../../packages/mediacenter/platform/package.mk ] ; then
+  # update package.mk
+  RESOLVED_HASH=$(resolve_hash $PKG_NAME.git $GIT_HASH)
+  sed -i "s|PKG_VERSION=.*|PKG_VERSION=\"$RESOLVED_HASH\"|g" ../../packages/mediacenter/platform/package.mk
+fi
+
 # kodi-platform
 REPO=$(cat $KODI_DIR/project/cmake/addons/depends/common/kodi-platform/kodi-platform.txt | awk '{print $2}')
 GIT_HASH=$(cat $KODI_DIR/project/cmake/addons/depends/common/kodi-platform/kodi-platform.txt | awk '{print $3}')
